@@ -278,7 +278,7 @@ class VerbalCog(commands.Cog):
             pages.append(embed)
 
         view = PagedEmbedsView(pages, author_id=interaction.user.id)
-        await interaction.response.send_message(embed=pages[0], view=view, ephemeral=True)
+        await interaction.response.send_message(embed=pages[0], view=view, ephemeral=False)
 
     @verbal.command(name="delete", description="Delete a verbal warning by its ID")
     async def verbal_delete(self, interaction: discord.Interaction, id: int) -> None:
