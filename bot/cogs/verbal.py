@@ -242,7 +242,7 @@ class VerbalCog(commands.Cog):
             pages.append(embed)
 
         view = PagedEmbedsView(pages, author_id=interaction.user.id)
-        await interaction.response.send_message(embed=pages[0], view=view, ephemeral=True)
+        await interaction.response.send_message(embed=pages[0], view=view, ephemeral=False)
 
     @verbal.command(name="search", description="Search a user's verbal warnings")
     async def verbal_search(self, interaction: discord.Interaction, user: discord.User) -> None:
