@@ -7,9 +7,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot.checks import has_staff_role_or_above
-from bot.db import Database, VerbalWarning
-from bot.ui import PagedEmbedsView
+from checks import has_staff_role_or_above
+from db import Database, VerbalWarning
+from ui import PagedEmbedsView
 
 
 def _is_discord_message_link(link: str) -> bool:

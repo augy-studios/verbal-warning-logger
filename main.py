@@ -6,8 +6,8 @@ import logging
 import discord
 from discord.ext import commands
 
-from bot.config import Settings, load_settings
-from bot.db import Database
+from config import Settings, load_settings
+from db import Database
 
 
 logging.basicConfig(
@@ -42,8 +42,8 @@ class VerbalWarningsBot(commands.Bot):
         await self.db.init_schema()
 
         # Load cogs
-        await self.load_extension("bot.cogs.verbal")
-        await self.load_extension("bot.cogs.utility")
+        await self.load_extension("cogs.verbal")
+        await self.load_extension("cogs.utility")
 
         # Sync commands globally (can take time) — you can switch to guild sync during dev.
         await self.tree.sync()
