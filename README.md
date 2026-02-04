@@ -9,6 +9,7 @@ A small **Discord.py slash-command bot** for tracking **verbal warnings**.
 - `/verbal search` — list warnings for a user (paginated embeds)
 - `/verbal delete` — delete by warning ID
 - `/verbal edit` — edit by warning ID (modal)
+- `/verbal lb [offender|mod]` — shows a leaderboard of verbal warnings
 - `/ping` — show bot latency
 - `/about` — owner + contact info
 
@@ -64,7 +65,7 @@ Fill in:
 ### 4) Run
 
 ```bash
-python -m main
+python -m bot.main
 ```
 
 ## Development notes
