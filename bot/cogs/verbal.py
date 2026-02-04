@@ -138,21 +138,6 @@ class VerbalCog(commands.Cog):
 
     verbal = app_commands.Group(name="verbal", description="Track verbal warnings")
 
-    @verbal.command(name="add", description="Add a verbal warning")
-    @has_staff_role_or_above(staff_role_id=lambda self: self.staff_role_id)  # type: ignore
-    async def add(
-        self,
-        interaction: discord.Interaction,
-        user: discord.User,
-        reason: str,
-        evidence_link: str,
-        mod: Optional[discord.User] = None,
-    ) -> None:
-        # The decorator trick above can't accept lambda directly in discord.py,
-        # so we do a runtime check (kept below) and keep the decorator-less check style.
-        # NOTE: This function body won't run if we raise early.
-        await interaction.response.defer(ephemeral=True)
-
     # --- runtime-check wrappers (discord.py can't bind self into app_commands.check nicely) ---
 
     async def _staff_check(self, interaction: discord.Interaction) -> None:
