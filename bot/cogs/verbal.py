@@ -273,32 +273,50 @@ class VerbalCog(commands.Cog):
             title = "🏆 Verbal Warnings Leaderboard (Moderators)"
             suffix = "warnings issued"
 
-        # Sort descending by count
-        ranked = counter.most_common(10)
+        ranked = counter.most_common()  # full list, not just top 10
+        total_entries = len(ranked)
 
-        embed = discord.Embed(
-            title=title,
-            color=self.embed_color,
-            description=f"Showing top `{len(ranked)}` results",
-        )
-
+        pages: list[discord.Embed] = []
         medals = ["🥇", "🥈", "🥉"]
 
-        lines = []
-        for index, (user_id, count) in enumerate(ranked, start=1):
-            medal = medals[index - 1] if index <= 3 else f"`#{index}`"
-            lines.append(f"{medal} <@{user_id}> — **{count}** {suffix}")
+        for page_index, chunk in enumerate(_chunk(ranked, 10), start=1):
+            embed = discord.Embed(
+                title=title,
+                color=self.embed_color,
+                description=(
+                    f"**Total entries:** `{total_entries}`\n"
+                    f"**Page:** `{page_index}/{(total_entries - 1)//10 + 1}`"
+                ),
+            )
 
-        embed.add_field(
-            name="Leaderboard",
-            value="\n".join(lines),
-            inline=False,
-        )
+            lines = []
+            for offset, (user_id, count) in enumerate(chunk):
+                rank = (page_index - 1) * 10 + offset + 1
 
+                if rank <= 3:
+                    prefix = medals[rank - 1]
+                else:
+                    prefix = f"`#{rank}`"
+
+                lines.append(
+                    f"{prefix} <@{user_id}> — **{count}** {suffix}"
+                )
+
+            embed.add_field(
+                name="Leaderboard",
+                value="\n".join(lines),
+                inline=False,
+            )
+
+            pages.append(embed)
+
+        view = PagedEmbedsView(pages, author_id=interaction.user.id)
         await interaction.response.send_message(
-            embed=embed,
-            ephemeral=False,  # public leaderboard
+            embed=pages[0],
+            view=view,
+            ephemeral=False,  # public, but staff-only to invoke
         )
+
 
     @verbal.command(name="search", description="Search a user's verbal warnings")
     async def verbal_search(self, interaction: discord.Interaction, user: discord.User) -> None:
