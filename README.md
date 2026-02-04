@@ -64,13 +64,13 @@ Fill in:
 ### 4) Run
 
 ```bash
-python -m bot.main
+python -m main
 ```
 
 ## Development notes
 
 - Slash commands are synced globally by default. Global sync can take time.
-If you want faster iteration, you can change `await self.tree.sync()` in `bot/main.py`
+If you want faster iteration, you can change `await self.tree.sync()` in `main.py`
 to guild-only sync:
 
 ### Example:
