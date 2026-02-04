@@ -22,8 +22,8 @@ class UtilityCog(commands.Cog):
             title="About",
             color=self.bot.embed_color,  # type: ignore[attr-defined]
             description=(
-                "Verbal Warnings Bot — tracks verbal warnings only.\n\n"
-                "**Owner:** Augustine\n"
+                "Verbal Warnings Logger — Helps you track verbal warnings.\n\n"
+                "**Owner:** <@269080651599314944>\n"
                 "**Contact:** augy@augystudios.com"
             ),
         )
