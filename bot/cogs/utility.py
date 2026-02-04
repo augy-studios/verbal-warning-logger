@@ -14,7 +14,7 @@ class UtilityCog(commands.Cog):
         # latency is websocket latency; it's the closest simple proxy for responsiveness.
         ms = round(self.bot.latency * 1000)
         embed = discord.Embed(title="Pong!", description=f"Latency: `{ms} ms`", color=self.bot.embed_color)  # type: ignore[attr-defined]
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
     @app_commands.command(name="about", description="About this bot")
     async def about(self, interaction: discord.Interaction) -> None:
@@ -27,7 +27,7 @@ class UtilityCog(commands.Cog):
                 "**Contact:** augy@augystudios.com"
             ),
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
 async def setup(bot: commands.Bot) -> None:
