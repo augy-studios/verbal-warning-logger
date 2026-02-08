@@ -21,6 +21,7 @@ class VerbalWarningsBot(commands.Bot):
     def __init__(self, settings: Settings) -> None:
         intents = discord.Intents.default()
         intents.members = True
+        intents.message_content = True
         # Slash commands don't need message content.
 
         super().__init__(
