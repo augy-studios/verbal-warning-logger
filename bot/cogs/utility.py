@@ -165,48 +165,6 @@ class UtilityCog(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=False)
 
-
-    @retrieveids_leaderboard.callback
-    async def retrieveids_leaderboard_callback(self, interaction: discord.Interaction, mode: str):
-
-        warnings = await self.db.list_warnings()
-        if not warnings:
-            await interaction.response.send_message("Database is empty.", ephemeral=True)
-            return
-
-        if mode == "offender":
-            ids = {w.userId for w in warnings}
-            title = "Offenders in Database"
-        else:
-            ids = {w.modId for w in warnings}
-            title = "Moderators in Database"
-
-        lines = []
-
-        for user_id in ids:
-            user = interaction.guild.get_member(user_id) if interaction.guild else None
-
-            if user is None:
-                try:
-                    user = await self.bot.fetch_user(user_id)
-                except Exception:
-                    lines.append(f"UnknownUser - {user_id}")
-                    continue
-
-            lines.append(f"{user.name} - {user_id}")
-
-        if not lines:
-            await interaction.response.send_message("No users found.", ephemeral=True)
-            return
-
-        embed = discord.Embed(
-            title=title,
-            description="```\n" + "\n".join(sorted(lines)) + "\n```",
-            color=self.bot.embed_color,  # type: ignore[attr-defined]
-        )
-
-        await interaction.response.send_message(embed=embed, ephemeral=False)
-
     # ======================
     # ERROR HANDLER
     # ======================
