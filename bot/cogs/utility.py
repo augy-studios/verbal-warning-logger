@@ -59,7 +59,7 @@ class UtilityCog(commands.Cog):
 
         for line in lines:
             # +1 for newline
-            if current_len + len(line) + 1 > 4096:
+            if current_len + len(line) + 1 > 4000:
                 embed = discord.Embed(
                     title=title,
                     description="```\n" + "\n".join(chunk) + "\n```",
