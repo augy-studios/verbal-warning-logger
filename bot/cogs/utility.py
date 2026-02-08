@@ -276,7 +276,7 @@ class UtilityCog(commands.Cog):
 
     @retrieveids.command(
         name="searchmessages",
-        description="Search messages in a channel (past 2 weeks) matching the text"
+        description="Search messages in a channel (past 24h) matching the text"
     )
     @app_commands.checks.has_permissions(manage_messages=True)
     async def retrieveids_searchmessages(
@@ -305,7 +305,7 @@ class UtilityCog(commands.Cog):
         import datetime
 
         search = text.lower()
-        cutoff = discord.utils.utcnow() - datetime.timedelta(days=14)
+        cutoff = discord.utils.utcnow() - datetime.timedelta(hours=24)  # <-- 24H instead of 14 days
 
         results = []
 
@@ -327,13 +327,13 @@ class UtilityCog(commands.Cog):
 
         if not results:
             await interaction.followup.send(
-                f"No messages matched your search in {channel.mention} (last 14 days).",
+                f"No messages matched your search in {channel.mention} (last 24h).",
                 ephemeral=True
             )
             return
 
         pages = self._paginate_lines(
-            title=f"Messages in #{channel.name} matching '{text}' (Last 14 days)",
+            title=f"Messages in #{channel.name} matching '{text}' (Last 24h)",
             lines=results,
             interaction=interaction,
         )
