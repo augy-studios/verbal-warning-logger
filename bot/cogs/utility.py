@@ -5,7 +5,9 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db import Database
-from typing import Literal
+from bot.ui import PagedEmbedsView
+from typing import Literal, List
+
 
 class UtilityCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -40,6 +42,51 @@ class UtilityCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     # ======================
+    # PAGINATION HELPER
+    # ======================
+
+    def _paginate_lines(
+        self,
+        title: str,
+        lines: List[str],
+        interaction: discord.Interaction,
+    ) -> List[discord.Embed]:
+        """Split lines into multiple embeds if >4096 chars (Discord limit)."""
+
+        pages: List[discord.Embed] = []
+        chunk: List[str] = []
+        current_len = 0
+
+        for line in lines:
+            # +1 for newline
+            if current_len + len(line) + 1 > 4096:
+                embed = discord.Embed(
+                    title=title,
+                    description="```\n" + "\n".join(chunk) + "\n```",
+                    color=self.bot.embed_color,
+                )
+                pages.append(embed)
+                chunk = []
+                current_len = 0
+
+            chunk.append(line)
+            current_len += len(line) + 1
+
+        if chunk:
+            embed = discord.Embed(
+                title=title,
+                description="```\n" + "\n".join(chunk) + "\n```",
+                color=self.bot.embed_color,
+            )
+            pages.append(embed)
+
+        # Add page footer like verbal.py
+        for i, embed in enumerate(pages, start=1):
+            embed.set_footer(text=f"Page {i}/{len(pages)}")
+
+        return pages
+
+    # ======================
     # COMMAND GROUP: /retrieveids
     # ======================
 
@@ -59,25 +106,26 @@ class UtilityCog(commands.Cog):
         interaction: discord.Interaction,
         category: discord.CategoryChannel,
     ) -> None:
-        
+
         await interaction.response.defer(thinking=True)
 
         if not category.channels:
             await interaction.followup.send("No channels found.", ephemeral=True)
             return
 
-        lines = [
-            f"{channel.name} - {channel.id}"
-            for channel in category.channels
-        ]
+        lines = [f"{c.name} - {c.id}" for c in category.channels]
 
-        embed = discord.Embed(
+        pages = self._paginate_lines(
             title=f"Channels in {category.name}",
-            description="```\n" + "\n".join(lines) + "\n```",
-            color=self.bot.embed_color,  # type: ignore[attr-defined]
+            lines=lines,
+            interaction=interaction,
         )
 
-        await interaction.followup.send(embed=embed, ephemeral=False)
+        if len(pages) == 1:
+            await interaction.followup.send(embed=pages[0], ephemeral=False)
+        else:
+            view = PagedEmbedsView(pages, author_id=interaction.user.id)
+            await interaction.followup.send(embed=pages[0], view=view, ephemeral=False)
 
     # ----------------------
     # /retrieveids users
@@ -90,7 +138,7 @@ class UtilityCog(commands.Cog):
         interaction: discord.Interaction,
         role: discord.Role,
     ) -> None:
-        
+
         await interaction.response.defer(thinking=True)
 
         guild = interaction.guild
@@ -99,23 +147,23 @@ class UtilityCog(commands.Cog):
             return
 
         members = [m for m in guild.members if role in m.roles]
-
         if not members:
             await interaction.followup.send("No users found.", ephemeral=True)
             return
 
-        lines = [
-            f"{member.name} - {member.id}"
-            for member in members
-        ]
+        lines = [f"{m.name} - {m.id}" for m in members]
 
-        embed = discord.Embed(
+        pages = self._paginate_lines(
             title=f"Users with role {role.name}",
-            description="```\n" + "\n".join(lines) + "\n```",
-            color=self.bot.embed_color,  # type: ignore[attr-defined]
+            lines=lines,
+            interaction=interaction,
         )
 
-        await interaction.followup.send(embed=embed, ephemeral=False)
+        if len(pages) == 1:
+            await interaction.followup.send(embed=pages[0], ephemeral=False)
+        else:
+            view = PagedEmbedsView(pages, author_id=interaction.user.id)
+            await interaction.followup.send(embed=pages[0], view=view, ephemeral=False)
 
     # ----------------------
     # /retrieveids leaderboard
@@ -131,12 +179,12 @@ class UtilityCog(commands.Cog):
         interaction: discord.Interaction,
         mode: Literal["offender", "mod"],
     ) -> None:
-        
+
         await interaction.response.defer(thinking=True)
-        
+
         warnings = await self.db.list_warnings()
         if not warnings:
-            await interaction.response.send_message("Database is empty.", ephemeral=True)
+            await interaction.followup.send("Database is empty.", ephemeral=True)
             return
 
         if mode == "offender":
@@ -150,7 +198,6 @@ class UtilityCog(commands.Cog):
 
         for user_id in ids:
             user = interaction.guild.get_member(user_id) if interaction.guild else None
-
             if user is None:
                 try:
                     user = await self.bot.fetch_user(user_id)
@@ -164,13 +211,17 @@ class UtilityCog(commands.Cog):
             await interaction.followup.send("No users found.", ephemeral=True)
             return
 
-        embed = discord.Embed(
+        pages = self._paginate_lines(
             title=title,
-            description="```\n" + "\n".join(sorted(lines)) + "\n```",
-            color=self.bot.embed_color,
+            lines=sorted(lines),
+            interaction=interaction,
         )
 
-        await interaction.followup.send(embed=embed, ephemeral=False)
+        if len(pages) == 1:
+            await interaction.followup.send(embed=pages[0], ephemeral=False)
+        else:
+            view = PagedEmbedsView(pages, author_id=interaction.user.id)
+            await interaction.followup.send(embed=pages[0], view=view, ephemeral=False)
 
     # ======================
     # ERROR HANDLER
