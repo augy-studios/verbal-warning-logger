@@ -223,6 +223,53 @@ class UtilityCog(commands.Cog):
             view = PagedEmbedsView(pages, author_id=interaction.user.id)
             await interaction.followup.send(embed=pages[0], view=view, ephemeral=False)
 
+    # ----------------------
+    # /retrieveids searchusers
+    # ----------------------
+
+    @retrieveids.command(
+        name="searchusers",
+        description="Search the whole server for usernames matching the text"
+    )
+    @app_commands.checks.has_permissions(manage_roles=True)
+    async def retrieveids_searchusers(
+        self,
+        interaction: discord.Interaction,
+        text: str,
+    ) -> None:
+
+        await interaction.response.defer(thinking=True)
+
+        guild = interaction.guild
+        if guild is None:
+            await interaction.followup.send("Guild not found.", ephemeral=True)
+            return
+
+        search = text.lower()
+
+        matched_members = [
+            m for m in guild.members
+            if search in m.name.lower() or search in m.display_name.lower()
+        ]
+
+        if not matched_members:
+            await interaction.followup.send("No users matched your search.", ephemeral=True)
+            return
+
+        lines = [f"{m.name} - {m.id}" for m in matched_members]
+
+        pages = self._paginate_lines(
+            title=f"Users matching '{text}'",
+            lines=sorted(lines),
+            interaction=interaction,
+        )
+
+        if len(pages) == 1:
+            await interaction.followup.send(embed=pages[0], ephemeral=False)
+        else:
+            view = PagedEmbedsView(pages, author_id=interaction.user.id)
+            await interaction.followup.send(embed=pages[0], view=view, ephemeral=False)
+    
     # ======================
     # ERROR HANDLER
     # ======================
@@ -230,6 +277,7 @@ class UtilityCog(commands.Cog):
     @retrieveids_channels.error
     @retrieveids_users.error
     @retrieveids_leaderboard.error
+    @retrieveids_searchusers.error
     async def retrieveids_error(self, interaction: discord.Interaction, error):
         if isinstance(error, app_commands.errors.MissingPermissions):
             await interaction.response.send_message(
