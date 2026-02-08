@@ -117,5 +117,4 @@ class UtilityCog(commands.Cog):
 
 async def setup(bot: commands.Bot) -> None:
     cog = UtilityCog(bot)
-    bot.tree.add_command(cog.retrieveids)  # Register the command group
     await bot.add_cog(cog)
