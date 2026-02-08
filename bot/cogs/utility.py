@@ -59,6 +59,8 @@ class UtilityCog(commands.Cog):
         interaction: discord.Interaction,
         category: discord.CategoryChannel,
     ) -> None:
+        
+        await interaction.response.defer(thinking=True)
 
         if not category.channels:
             await interaction.response.send_message("No channels found.", ephemeral=True)
@@ -88,6 +90,8 @@ class UtilityCog(commands.Cog):
         interaction: discord.Interaction,
         role: discord.Role,
     ) -> None:
+        
+        await interaction.response.defer(thinking=True)
 
         guild = interaction.guild
         if guild is None:
@@ -127,6 +131,9 @@ class UtilityCog(commands.Cog):
         interaction: discord.Interaction,
         mode: Literal["offender", "mod"],
     ) -> None:
+        
+        await interaction.response.defer(thinking=True)
+        
         warnings = await self.db.list_warnings()
         if not warnings:
             await interaction.response.send_message("Database is empty.", ephemeral=True)
