@@ -63,7 +63,7 @@ class UtilityCog(commands.Cog):
         await interaction.response.defer(thinking=True)
 
         if not category.channels:
-            await interaction.response.send_message("No channels found.", ephemeral=True)
+            await interaction.followup.send("No channels found.", ephemeral=True)
             return
 
         lines = [
@@ -77,7 +77,7 @@ class UtilityCog(commands.Cog):
             color=self.bot.embed_color,  # type: ignore[attr-defined]
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        await interaction.followup.send(embed=embed, ephemeral=False)
 
     # ----------------------
     # /retrieveids users
@@ -95,13 +95,13 @@ class UtilityCog(commands.Cog):
 
         guild = interaction.guild
         if guild is None:
-            await interaction.response.send_message("Guild not found.", ephemeral=True)
+            await interaction.followup.send("Guild not found.", ephemeral=True)
             return
 
         members = [m for m in guild.members if role in m.roles]
 
         if not members:
-            await interaction.response.send_message("No users found.", ephemeral=True)
+            await interaction.followup.send("No users found.", ephemeral=True)
             return
 
         lines = [
@@ -115,7 +115,7 @@ class UtilityCog(commands.Cog):
             color=self.bot.embed_color,  # type: ignore[attr-defined]
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        await interaction.followup.send(embed=embed, ephemeral=False)
 
     # ----------------------
     # /retrieveids leaderboard
@@ -161,7 +161,7 @@ class UtilityCog(commands.Cog):
             lines.append(f"{user.name} - {user_id}")
 
         if not lines:
-            await interaction.response.send_message("No users found.", ephemeral=True)
+            await interaction.followup.send("No users found.", ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -170,7 +170,7 @@ class UtilityCog(commands.Cog):
             color=self.bot.embed_color,
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        await interaction.followup.send(embed=embed, ephemeral=False)
 
     # ======================
     # ERROR HANDLER
