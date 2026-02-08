@@ -20,6 +20,7 @@ log = logging.getLogger("verbal-bot")
 class VerbalWarningsBot(commands.Bot):
     def __init__(self, settings: Settings) -> None:
         intents = discord.Intents.default()
+        intents.members = True
         # Slash commands don't need message content.
 
         super().__init__(

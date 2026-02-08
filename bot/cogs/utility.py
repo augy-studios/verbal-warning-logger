@@ -80,7 +80,13 @@ class UtilityCog(commands.Cog):
         interaction: discord.Interaction,
         role: discord.Role,
     ) -> None:
-        member_ids = [str(member.id) for member in role.members]
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message("Guild not found.", ephemeral=True)
+            return
+
+        # Reliable method: scan guild members instead of role.members
+        member_ids = [str(member.id) for member in guild.members if role in member.roles]
 
         if not member_ids:
             await interaction.response.send_message(
