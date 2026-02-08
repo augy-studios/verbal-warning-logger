@@ -5,7 +5,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db import Database
-
+from typing import Literal
 
 class UtilityCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -125,16 +125,46 @@ class UtilityCog(commands.Cog):
     async def retrieveids_leaderboard(
         self,
         interaction: discord.Interaction,
-        mode: discord.app_commands.Choice[str],
+        mode: Literal["offender", "mod"],
     ) -> None:
-        pass  # placeholder for type hinting
+        warnings = await self.db.list_warnings()
+        if not warnings:
+            await interaction.response.send_message("Database is empty.", ephemeral=True)
+            return
 
-    @retrieveids_leaderboard.autocomplete("mode")
-    async def leaderboard_mode_autocomplete(self, interaction, current: str):
-        return [
-            app_commands.Choice(name="mod", value="mod"),
-            app_commands.Choice(name="offender", value="offender"),
-        ]
+        if mode == "offender":
+            ids = {w.userId for w in warnings}
+            title = "Offenders in Database"
+        else:
+            ids = {w.modId for w in warnings}
+            title = "Moderators in Database"
+
+        lines = []
+
+        for user_id in ids:
+            user = interaction.guild.get_member(user_id) if interaction.guild else None
+
+            if user is None:
+                try:
+                    user = await self.bot.fetch_user(user_id)
+                except Exception:
+                    lines.append(f"UnknownUser - {user_id}")
+                    continue
+
+            lines.append(f"{user.name} - {user_id}")
+
+        if not lines:
+            await interaction.response.send_message("No users found.", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title=title,
+            description="```\n" + "\n".join(sorted(lines)) + "\n```",
+            color=self.bot.embed_color,
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=False)
+
 
     @retrieveids_leaderboard.callback
     async def retrieveids_leaderboard_callback(self, interaction: discord.Interaction, mode: str):
