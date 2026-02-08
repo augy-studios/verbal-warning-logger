@@ -70,7 +70,7 @@ class UtilityCog(commands.Cog):
             color=self.bot.embed_color,  # type: ignore[attr-defined]
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
     # /retrieveids users <role>
     @retrieveids.command(name="users", description="Retrieve all user IDs of members with a role")
@@ -103,7 +103,7 @@ class UtilityCog(commands.Cog):
             color=self.bot.embed_color,  # type: ignore[attr-defined]
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
     # ======================
     # ERROR HANDLER
