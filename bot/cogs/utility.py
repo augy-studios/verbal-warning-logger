@@ -270,80 +270,6 @@ class UtilityCog(commands.Cog):
             view = PagedEmbedsView(pages, author_id=interaction.user.id)
             await interaction.followup.send(embed=pages[0], view=view, ephemeral=False)
     
-    # ----------------------
-    # /retrieveids searchmessages
-    # ----------------------
-
-    @retrieveids.command(
-        name="searchmessages",
-        description="Search messages in a channel (past 24h) matching the text"
-    )
-    @app_commands.checks.has_permissions(manage_messages=True)
-    async def retrieveids_searchmessages(
-        self,
-        interaction: discord.Interaction,
-        channel: discord.TextChannel,
-        text: str,
-    ) -> None:
-
-        await interaction.response.defer(thinking=True)
-
-        guild = interaction.guild
-        if guild is None:
-            await interaction.followup.send("Guild not found.", ephemeral=True)
-            return
-
-        # Check bot permissions in that channel
-        perms = channel.permissions_for(guild.me)
-        if not perms.read_message_history or not perms.view_channel:
-            await interaction.followup.send(
-                f"I cannot read messages in {channel.mention}.",
-                ephemeral=True
-            )
-            return
-
-        import datetime
-
-        search = text.lower()
-        cutoff = discord.utils.utcnow() - datetime.timedelta(hours=24)  # <-- 24H instead of 14 days
-
-        results = []
-
-        try:
-            async for msg in channel.history(limit=None, after=cutoff):
-                if not msg.content:
-                    continue
-
-                if search in msg.content.lower():
-                    clean_text = msg.content.replace("\n", " ").strip()
-                    results.append(f"{msg.jump_url} - {clean_text}")
-
-        except Exception:
-            await interaction.followup.send(
-                f"Failed to read messages from {channel.mention}.",
-                ephemeral=True
-            )
-            return
-
-        if not results:
-            await interaction.followup.send(
-                f"No messages matched your search in {channel.mention} (last 24h).",
-                ephemeral=True
-            )
-            return
-
-        pages = self._paginate_lines(
-            title=f"Messages in #{channel.name} matching '{text}' (Last 24h)",
-            lines=results,
-            interaction=interaction,
-        )
-
-        if len(pages) == 1:
-            await interaction.followup.send(embed=pages[0], ephemeral=False)
-        else:
-            view = PagedEmbedsView(pages, author_id=interaction.user.id)
-            await interaction.followup.send(embed=pages[0], view=view, ephemeral=False)
-    
     # ======================
     # ERROR HANDLER
     # ======================
@@ -352,7 +278,6 @@ class UtilityCog(commands.Cog):
     @retrieveids_users.error
     @retrieveids_leaderboard.error
     @retrieveids_searchusers.error
-    @retrieveids_searchmessages.error
     async def retrieveids_error(self, interaction: discord.Interaction, error):
         if isinstance(error, app_commands.errors.MissingPermissions):
             await interaction.response.send_message(
