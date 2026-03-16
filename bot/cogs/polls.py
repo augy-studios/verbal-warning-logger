@@ -15,7 +15,7 @@ from bot.ui import PagedEmbedsView
 
 
 @dataclass(slots=True)
-class EvalPoll:
+class StaffPollPoll:
     id: int
     title: str
     description: str
@@ -27,15 +27,15 @@ class EvalPoll:
 
 
 @dataclass(slots=True)
-class EvalOption:
+class StaffPollOption:
     id: int
     poll_id: int
     label: str
     display_order: int
 
 
-class EvalDatabase:
-    def __init__(self, path: str = "staffevals.db") -> None:
+class StaffPollDatabase:
+    def __init__(self, path: str = "staffpolls.db") -> None:
         self.path = path
         self._conn: Optional[aiosqlite.Connection] = None
 
@@ -55,13 +55,13 @@ class EvalDatabase:
     @property
     def conn(self) -> aiosqlite.Connection:
         if self._conn is None:
-            raise RuntimeError("EvalDatabase is not connected")
+            raise RuntimeError("StaffPollDatabase is not connected")
         return self._conn
 
     async def init_schema(self) -> None:
         await self.conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS eval_polls (
+            CREATE TABLE IF NOT EXISTS staffpoll_polls (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 title       TEXT    NOT NULL,
                 description TEXT    NOT NULL DEFAULT '',
@@ -75,9 +75,9 @@ class EvalDatabase:
         )
         await self.conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS eval_options (
+            CREATE TABLE IF NOT EXISTS staffpoll_options (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                poll_id       INTEGER NOT NULL REFERENCES eval_polls(id) ON DELETE CASCADE,
+                poll_id       INTEGER NOT NULL REFERENCES staffpoll_polls(id) ON DELETE CASCADE,
                 label         TEXT    NOT NULL,
                 display_order INTEGER NOT NULL DEFAULT 0
             )
@@ -85,10 +85,10 @@ class EvalDatabase:
         )
         await self.conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS eval_votes (
+            CREATE TABLE IF NOT EXISTS staffpoll_votes (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                poll_id   INTEGER NOT NULL REFERENCES eval_polls(id) ON DELETE CASCADE,
-                option_id INTEGER NOT NULL REFERENCES eval_options(id) ON DELETE CASCADE,
+                poll_id   INTEGER NOT NULL REFERENCES staffpoll_polls(id) ON DELETE CASCADE,
+                option_id INTEGER NOT NULL REFERENCES staffpoll_options(id) ON DELETE CASCADE,
                 user_id   INTEGER NOT NULL,
                 voted_at  TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(poll_id, user_id)
@@ -96,13 +96,13 @@ class EvalDatabase:
             """
         )
         await self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_ep_active ON eval_polls(is_active)"
+            "CREATE INDEX IF NOT EXISTS idx_ep_active ON staffpoll_polls(is_active)"
         )
         await self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_eo_poll ON eval_options(poll_id)"
+            "CREATE INDEX IF NOT EXISTS idx_eo_poll ON staffpoll_options(poll_id)"
         )
         await self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_ev_poll ON eval_votes(poll_id)"
+            "CREATE INDEX IF NOT EXISTS idx_ev_poll ON staffpoll_votes(poll_id)"
         )
         await self.conn.commit()
 
@@ -110,7 +110,7 @@ class EvalDatabase:
 
     async def create_poll(self, title: str, description: str, created_by: int) -> int:
         cur = await self.conn.execute(
-            "INSERT INTO eval_polls (title, description, created_by) VALUES (?, ?, ?)",
+            "INSERT INTO staffpoll_polls (title, description, created_by) VALUES (?, ?, ?)",
             (title, description, created_by),
         )
         await self.conn.commit()
@@ -118,23 +118,23 @@ class EvalDatabase:
 
     async def set_poll_message(self, poll_id: int, channel_id: int, message_id: int) -> None:
         await self.conn.execute(
-            "UPDATE eval_polls SET channel_id = ?, message_id = ? WHERE id = ?",
+            "UPDATE staffpoll_polls SET channel_id = ?, message_id = ? WHERE id = ?",
             (channel_id, message_id, poll_id),
         )
         await self.conn.commit()
 
-    async def get_poll(self, poll_id: int) -> Optional[EvalPoll]:
+    async def get_poll(self, poll_id: int) -> Optional[StaffPollPoll]:
         cur = await self.conn.execute(
             "SELECT id, title, description, created_at, created_by, channel_id, message_id, is_active "
-            "FROM eval_polls WHERE id = ?",
+            "FROM staffpoll_polls WHERE id = ?",
             (poll_id,),
         )
         return _row_to_poll(await cur.fetchone())
 
-    async def list_polls(self, active_only: bool = False) -> list[EvalPoll]:
+    async def list_polls(self, active_only: bool = False) -> list[StaffPollPoll]:
         sql = (
             "SELECT id, title, description, created_at, created_by, channel_id, message_id, is_active "
-            "FROM eval_polls"
+            "FROM staffpoll_polls"
         )
         if active_only:
             sql += " WHERE is_active = 1"
@@ -144,7 +144,7 @@ class EvalDatabase:
 
     async def update_poll(self, poll_id: int, title: str, description: str) -> int:
         cur = await self.conn.execute(
-            "UPDATE eval_polls SET title = ?, description = ? WHERE id = ?",
+            "UPDATE staffpoll_polls SET title = ?, description = ? WHERE id = ?",
             (title, description, poll_id),
         )
         await self.conn.commit()
@@ -152,7 +152,7 @@ class EvalDatabase:
 
     async def disable_poll(self, poll_id: int) -> int:
         cur = await self.conn.execute(
-            "UPDATE eval_polls SET is_active = 0 WHERE id = ?", (poll_id,)
+            "UPDATE staffpoll_polls SET is_active = 0 WHERE id = ?", (poll_id,)
         )
         await self.conn.commit()
         return cur.rowcount
@@ -163,21 +163,21 @@ class EvalDatabase:
         ids: list[int] = []
         for order, label in enumerate(labels):
             cur = await self.conn.execute(
-                "INSERT INTO eval_options (poll_id, label, display_order) VALUES (?, ?, ?)",
+                "INSERT INTO staffpoll_options (poll_id, label, display_order) VALUES (?, ?, ?)",
                 (poll_id, label, order),
             )
             ids.append(int(cur.lastrowid))
         await self.conn.commit()
         return ids
 
-    async def get_options(self, poll_id: int) -> list[EvalOption]:
+    async def get_options(self, poll_id: int) -> list[StaffPollOption]:
         cur = await self.conn.execute(
-            "SELECT id, poll_id, label, display_order FROM eval_options "
+            "SELECT id, poll_id, label, display_order FROM staffpoll_options "
             "WHERE poll_id = ? ORDER BY display_order",
             (poll_id,),
         )
         return [
-            EvalOption(
+            StaffPollOption(
                 id=int(r["id"]),
                 poll_id=int(r["poll_id"]),
                 label=str(r["label"]),
@@ -186,33 +186,37 @@ class EvalDatabase:
             for r in await cur.fetchall()
         ]
 
-    async def update_option_labels(self, options: list[EvalOption], new_labels: list[str]) -> None:
+    async def update_option_labels(self, options: list[StaffPollOption], new_labels: list[str]) -> None:
         for option, label in zip(options, new_labels):
             await self.conn.execute(
-                "UPDATE eval_options SET label = ? WHERE id = ?", (label, option.id)
+                "UPDATE staffpoll_options SET label = ? WHERE id = ?", (label, option.id)
             )
         await self.conn.commit()
 
     # ---- votes ----
 
     async def cast_vote(self, poll_id: int, option_id: int, user_id: int) -> str:
-        """Returns 'new', 'changed', or 'same'."""
+        """Returns 'new', 'changed', or 'removed'."""
         cur = await self.conn.execute(
-            "SELECT id, option_id FROM eval_votes WHERE poll_id = ? AND user_id = ?",
+            "SELECT id, option_id FROM staffpoll_votes WHERE poll_id = ? AND user_id = ?",
             (poll_id, user_id),
         )
         existing = await cur.fetchone()
         if existing is None:
             await self.conn.execute(
-                "INSERT INTO eval_votes (poll_id, option_id, user_id) VALUES (?, ?, ?)",
+                "INSERT INTO staffpoll_votes (poll_id, option_id, user_id) VALUES (?, ?, ?)",
                 (poll_id, option_id, user_id),
             )
             await self.conn.commit()
             return "new"
         if int(existing["option_id"]) == option_id:
-            return "same"
+            await self.conn.execute(
+                "DELETE FROM staffpoll_votes WHERE id = ?", (int(existing["id"]),)
+            )
+            await self.conn.commit()
+            return "removed"
         await self.conn.execute(
-            "UPDATE eval_votes SET option_id = ?, voted_at = datetime('now') WHERE id = ?",
+            "UPDATE staffpoll_votes SET option_id = ?, voted_at = datetime('now') WHERE id = ?",
             (option_id, int(existing["id"])),
         )
         await self.conn.commit()
@@ -220,7 +224,7 @@ class EvalDatabase:
 
     async def get_vote_counts(self, poll_id: int) -> dict[int, int]:
         cur = await self.conn.execute(
-            "SELECT option_id, COUNT(*) AS cnt FROM eval_votes WHERE poll_id = ? GROUP BY option_id",
+            "SELECT option_id, COUNT(*) AS cnt FROM staffpoll_votes WHERE poll_id = ? GROUP BY option_id",
             (poll_id,),
         )
         return {int(r["option_id"]): int(r["cnt"]) for r in await cur.fetchall()}
@@ -228,7 +232,7 @@ class EvalDatabase:
     async def get_all_votes(self, poll_id: int) -> list[tuple[int, int]]:
         """Returns list of (user_id, option_id) ordered by vote time."""
         cur = await self.conn.execute(
-            "SELECT user_id, option_id FROM eval_votes WHERE poll_id = ? ORDER BY voted_at",
+            "SELECT user_id, option_id FROM staffpoll_votes WHERE poll_id = ? ORDER BY voted_at",
             (poll_id,),
         )
         return [(int(r["user_id"]), int(r["option_id"])) for r in await cur.fetchall()]
@@ -239,10 +243,10 @@ class EvalDatabase:
 _CLOSED_COLOR = 0x808080
 
 
-def _row_to_poll(row: aiosqlite.Row | None) -> Optional[EvalPoll]:
+def _row_to_poll(row: aiosqlite.Row | None) -> Optional[StaffPollPoll]:
     if row is None:
         return None
-    return EvalPoll(
+    return StaffPollPoll(
         id=int(row["id"]),
         title=str(row["title"]),
         description=str(row["description"]),
@@ -274,8 +278,8 @@ async def _resolve_username(client: discord.Client, user_id: int) -> str:
 
 
 def _build_poll_embed(
-    poll: EvalPoll,
-    options: list[EvalOption],
+    poll: StaffPollPoll,
+    options: list[StaffPollOption],
     vote_counts: dict[int, int],
     embed_color: int,
     created_by_name: str = "",
@@ -319,14 +323,14 @@ def _build_poll_embed(
 # ===== UI =====
 
 
-async def _send_participants(interaction: discord.Interaction, eval_db: EvalDatabase, poll_id: int, embed_color: int) -> None:
-    poll = await eval_db.get_poll(poll_id)
+async def _send_participants(interaction: discord.Interaction, staffpoll_db: StaffPollDatabase, poll_id: int, embed_color: int) -> None:
+    poll = await staffpoll_db.get_poll(poll_id)
     if poll is None:
         await interaction.response.send_message("Poll not found.", ephemeral=True)
         return
 
-    options = await eval_db.get_options(poll_id)
-    all_votes = await eval_db.get_all_votes(poll_id)
+    options = await staffpoll_db.get_options(poll_id)
+    all_votes = await staffpoll_db.get_all_votes(poll_id)
 
     by_option: dict[int, list[int]] = {o.id: [] for o in options}
     for user_id, option_id in all_votes:
@@ -370,12 +374,12 @@ async def _send_participants(interaction: discord.Interaction, eval_db: EvalData
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-class EvalVoteButton(discord.ui.Button["EvalVoteView"]):
+class StaffPollVoteButton(discord.ui.Button["StaffPollVoteView"]):
     def __init__(self, option_id: int, label: str, poll_id: int, is_active: bool) -> None:
         super().__init__(
             label=label[:80],
             style=discord.ButtonStyle.primary if is_active else discord.ButtonStyle.secondary,
-            custom_id=f"eval_vote_{poll_id}_{option_id}",
+            custom_id=f"staffpoll_vote_{poll_id}_{option_id}",
             disabled=not is_active,
         )
         self._option_id = option_id
@@ -386,27 +390,27 @@ class EvalVoteButton(discord.ui.Button["EvalVoteView"]):
         await self.view.handle_vote(interaction, self._poll_id, self._option_id)
 
 
-class EvalParticipantsButton(discord.ui.Button["EvalVoteView"]):
+class StaffPollParticipantsButton(discord.ui.Button["StaffPollVoteView"]):
     def __init__(self, poll_id: int) -> None:
         super().__init__(
             label="Participants",
             style=discord.ButtonStyle.secondary,
-            custom_id=f"eval_participants_{poll_id}",
+            custom_id=f"staffpoll_participants_{poll_id}",
             emoji="📋",
         )
         self._poll_id = poll_id
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert self.view is not None
-        await _send_participants(interaction, self.view._eval_db, self._poll_id, self.view._embed_color)
+        await _send_participants(interaction, self.view._staffpoll_db, self._poll_id, self.view._embed_color)
 
 
-class EvalReopenPollButton(discord.ui.Button["EvalEndedView"]):
+class StaffPollReopenPollButton(discord.ui.Button["StaffPollEndedView"]):
     def __init__(self, poll_id: int) -> None:
         super().__init__(
             label="Reopen Poll",
             style=discord.ButtonStyle.success,
-            custom_id=f"eval_reopen_{poll_id}",
+            custom_id=f"staffpoll_reopen_{poll_id}",
             emoji="🔓",
         )
         self._poll_id = poll_id
@@ -416,29 +420,29 @@ class EvalReopenPollButton(discord.ui.Button["EvalEndedView"]):
         await self.view.handle_reopen(interaction, self._poll_id)
 
 
-class EvalEndedView(discord.ui.View):
+class StaffPollEndedView(discord.ui.View):
     """Persistent view shown on a poll message after it has been ended."""
 
     def __init__(
         self,
         poll_id: int,
-        options: list[EvalOption],
-        eval_db: EvalDatabase,
+        options: list[StaffPollOption],
+        staffpoll_db: StaffPollDatabase,
         embed_color: int,
         created_by: int,
     ) -> None:
         super().__init__(timeout=None)
         self._poll_id = poll_id
         self._options = options
-        self._eval_db = eval_db
+        self._staffpoll_db = staffpoll_db
         self._embed_color = embed_color
         self._created_by = created_by
 
-        self.add_item(EvalParticipantsButton(poll_id=poll_id))
-        self.add_item(EvalReopenPollButton(poll_id=poll_id))
+        self.add_item(StaffPollParticipantsButton(poll_id=poll_id))
+        self.add_item(StaffPollReopenPollButton(poll_id=poll_id))
 
     async def handle_reopen(self, interaction: discord.Interaction, poll_id: int) -> None:
-        poll = await self._eval_db.get_poll(poll_id)
+        poll = await self._staffpoll_db.get_poll(poll_id)
         if poll is None:
             await interaction.response.send_message("Poll not found.", ephemeral=True)
             return
@@ -455,23 +459,23 @@ class EvalEndedView(discord.ui.View):
             )
             return
 
-        await self._eval_db.conn.execute(
-            "UPDATE eval_polls SET is_active = 1 WHERE id = ?", (poll_id,)
+        await self._staffpoll_db.conn.execute(
+            "UPDATE staffpoll_polls SET is_active = 1 WHERE id = ?", (poll_id,)
         )
-        await self._eval_db.conn.commit()
+        await self._staffpoll_db.conn.commit()
 
-        options = await self._eval_db.get_options(poll_id)
-        reopened_poll = await self._eval_db.get_poll(poll_id)
+        options = await self._staffpoll_db.get_options(poll_id)
+        reopened_poll = await self._staffpoll_db.get_poll(poll_id)
         assert reopened_poll is not None
 
-        vote_counts = await self._eval_db.get_vote_counts(poll_id)
+        vote_counts = await self._staffpoll_db.get_vote_counts(poll_id)
         created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
         embed = _build_poll_embed(reopened_poll, options, vote_counts, self._embed_color, created_by_name)
 
-        new_view = EvalVoteView(
+        new_view = StaffPollVoteView(
             poll_id=poll_id,
             options=options,
-            eval_db=self._eval_db,
+            staffpoll_db=self._staffpoll_db,
             embed_color=self._embed_color,
             is_active=True,
             created_by=poll.created_by,
@@ -480,12 +484,12 @@ class EvalEndedView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=new_view)
 
 
-class EvalEndPollButton(discord.ui.Button["EvalVoteView"]):
+class StaffPollEndPollButton(discord.ui.Button["StaffPollVoteView"]):
     def __init__(self, poll_id: int) -> None:
         super().__init__(
             label="End Poll",
             style=discord.ButtonStyle.danger,
-            custom_id=f"eval_end_{poll_id}",
+            custom_id=f"staffpoll_end_{poll_id}",
             emoji="🔒",
         )
         self._poll_id = poll_id
@@ -495,27 +499,27 @@ class EvalEndPollButton(discord.ui.Button["EvalVoteView"]):
         await self.view.handle_end_poll(interaction, self._poll_id)
 
 
-class EvalVoteView(discord.ui.View):
-    """Persistent vote view attached to an eval poll message."""
+class StaffPollVoteView(discord.ui.View):
+    """Persistent vote view attached to a staff poll message."""
 
     def __init__(
         self,
         poll_id: int,
-        options: list[EvalOption],
-        eval_db: EvalDatabase,
+        options: list[StaffPollOption],
+        staffpoll_db: StaffPollDatabase,
         embed_color: int,
         is_active: bool,
         created_by: int = 0,
     ) -> None:
         super().__init__(timeout=None)
         self._poll_id = poll_id
-        self._eval_db = eval_db
+        self._staffpoll_db = staffpoll_db
         self._embed_color = embed_color
         self._created_by = created_by
 
         for option in options:
             self.add_item(
-                EvalVoteButton(
+                StaffPollVoteButton(
                     option_id=option.id,
                     label=option.label,
                     poll_id=poll_id,
@@ -523,44 +527,41 @@ class EvalVoteView(discord.ui.View):
                 )
             )
 
-        self.add_item(EvalParticipantsButton(poll_id=poll_id))
+        self.add_item(StaffPollParticipantsButton(poll_id=poll_id))
         if is_active:
-            self.add_item(EvalEndPollButton(poll_id=poll_id))
+            self.add_item(StaffPollEndPollButton(poll_id=poll_id))
 
     async def handle_vote(
         self, interaction: discord.Interaction, poll_id: int, option_id: int
     ) -> None:
-        poll = await self._eval_db.get_poll(poll_id)
+        poll = await self._staffpoll_db.get_poll(poll_id)
         if poll is None or not poll.is_active:
             await interaction.response.send_message(
                 "This poll is no longer active.", ephemeral=True
             )
             return
 
-        result = await self._eval_db.cast_vote(poll_id, option_id, interaction.user.id)
+        result = await self._staffpoll_db.cast_vote(poll_id, option_id, interaction.user.id)
 
-        options = await self._eval_db.get_options(poll_id)
+        options = await self._staffpoll_db.get_options(poll_id)
         opt = next((o for o in options if o.id == option_id), None)
         label = opt.label if opt else "that option"
 
-        if result == "same":
-            await interaction.response.send_message(
-                f"You have already voted for **{label}**.", ephemeral=True
-            )
-            return
-
-        vote_counts = await self._eval_db.get_vote_counts(poll_id)
+        vote_counts = await self._staffpoll_db.get_vote_counts(poll_id)
         created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
         embed = _build_poll_embed(poll, options, vote_counts, self._embed_color, created_by_name)
         await interaction.response.edit_message(embed=embed)
 
-        verb = "cast for" if result == "new" else "changed to"
-        await interaction.followup.send(
-            f"Your vote has been {verb} **{label}**.", ephemeral=True
-        )
+        if result == "removed":
+            confirmation = f"Your vote for **{label}** has been removed."
+        elif result == "new":
+            confirmation = f"Your vote has been cast for **{label}**."
+        else:
+            confirmation = f"Your vote has been changed to **{label}**."
+        await interaction.followup.send(confirmation, ephemeral=True)
 
     async def handle_end_poll(self, interaction: discord.Interaction, poll_id: int) -> None:
-        poll = await self._eval_db.get_poll(poll_id)
+        poll = await self._staffpoll_db.get_poll(poll_id)
         if poll is None:
             await interaction.response.send_message("Poll not found.", ephemeral=True)
             return
@@ -577,11 +578,11 @@ class EvalVoteView(discord.ui.View):
             )
             return
 
-        await self._eval_db.disable_poll(poll_id)
+        await self._staffpoll_db.disable_poll(poll_id)
 
-        options = await self._eval_db.get_options(poll_id)
-        vote_counts = await self._eval_db.get_vote_counts(poll_id)
-        ended_poll = await self._eval_db.get_poll(poll_id)
+        options = await self._staffpoll_db.get_options(poll_id)
+        vote_counts = await self._staffpoll_db.get_vote_counts(poll_id)
+        ended_poll = await self._staffpoll_db.get_poll(poll_id)
         assert ended_poll is not None
 
         created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
@@ -589,10 +590,10 @@ class EvalVoteView(discord.ui.View):
             ended_poll, options, vote_counts, self._embed_color, created_by_name, final=True
         )
 
-        ended_view = EvalEndedView(
+        ended_view = StaffPollEndedView(
             poll_id=poll_id,
             options=options,
-            eval_db=self._eval_db,
+            staffpoll_db=self._staffpoll_db,
             embed_color=self._embed_color,
             created_by=poll.created_by,
         )
@@ -603,7 +604,7 @@ class EvalVoteView(discord.ui.View):
 # ===== MODALS =====
 
 
-class CreateEvalModal(discord.ui.Modal, title="Create evaluation poll"):
+class CreateStaffPollModal(discord.ui.Modal, title="Create staff poll"):
     poll_title = discord.ui.TextInput(
         label="Poll title",
         placeholder="e.g. Staff Evaluation — April 2026",
@@ -623,9 +624,9 @@ class CreateEvalModal(discord.ui.Modal, title="Create evaluation poll"):
         max_length=1000,
     )
 
-    def __init__(self, eval_db: EvalDatabase, embed_color: int) -> None:
+    def __init__(self, staffpoll_db: StaffPollDatabase, embed_color: int) -> None:
         super().__init__(timeout=300)
-        self._eval_db = eval_db
+        self._staffpoll_db = staffpoll_db
         self._embed_color = embed_color
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
@@ -651,19 +652,19 @@ class CreateEvalModal(discord.ui.Modal, title="Create evaluation poll"):
             )
             return
 
-        poll_id = await self._eval_db.create_poll(title, description, interaction.user.id)
-        await self._eval_db.add_options(poll_id, options)
+        poll_id = await self._staffpoll_db.create_poll(title, description, interaction.user.id)
+        await self._staffpoll_db.add_options(poll_id, options)
 
-        poll = await self._eval_db.get_poll(poll_id)
-        eval_options = await self._eval_db.get_options(poll_id)
+        poll = await self._staffpoll_db.get_poll(poll_id)
+        staffpoll_options = await self._staffpoll_db.get_options(poll_id)
 
         assert poll is not None
         created_by_name = interaction.user.name
-        embed = _build_poll_embed(poll, eval_options, {}, self._embed_color, created_by_name)
-        view = EvalVoteView(
+        embed = _build_poll_embed(poll, staffpoll_options, {}, self._embed_color, created_by_name)
+        view = StaffPollVoteView(
             poll_id=poll_id,
-            options=eval_options,
-            eval_db=self._eval_db,
+            options=staffpoll_options,
+            staffpoll_db=self._staffpoll_db,
             embed_color=self._embed_color,
             is_active=True,
             created_by=interaction.user.id,
@@ -671,22 +672,22 @@ class CreateEvalModal(discord.ui.Modal, title="Create evaluation poll"):
 
         await interaction.response.send_message(embed=embed, view=view)
         msg = await interaction.original_response()
-        await self._eval_db.set_poll_message(poll_id, msg.channel.id, msg.id)
+        await self._staffpoll_db.set_poll_message(poll_id, msg.channel.id, msg.id)
 
         # Register for persistence across restarts
         interaction.client.add_view(view)  # type: ignore[union-attr]
 
 
-class EditEvalModal(discord.ui.Modal, title="Edit evaluation poll"):
+class EditStaffPollModal(discord.ui.Modal, title="Edit staff poll"):
     def __init__(
         self,
-        eval_db: EvalDatabase,
+        staffpoll_db: StaffPollDatabase,
         embed_color: int,
-        poll: EvalPoll,
-        options: list[EvalOption],
+        poll: StaffPollPoll,
+        options: list[StaffPollOption],
     ) -> None:
         super().__init__(timeout=300)
-        self._eval_db = eval_db
+        self._staffpoll_db = staffpoll_db
         self._embed_color = embed_color
         self._poll = poll
         self._options = options
@@ -733,20 +734,20 @@ class EditEvalModal(discord.ui.Modal, title="Edit evaluation poll"):
             )
             return
 
-        await self._eval_db.update_poll(self._poll.id, title, description)
-        await self._eval_db.update_option_labels(self._options, new_labels)
+        await self._staffpoll_db.update_poll(self._poll.id, title, description)
+        await self._staffpoll_db.update_option_labels(self._options, new_labels)
 
-        poll = await self._eval_db.get_poll(self._poll.id)
-        options = await self._eval_db.get_options(self._poll.id)
-        vote_counts = await self._eval_db.get_vote_counts(self._poll.id)
+        poll = await self._staffpoll_db.get_poll(self._poll.id)
+        options = await self._staffpoll_db.get_options(self._poll.id)
+        vote_counts = await self._staffpoll_db.get_vote_counts(self._poll.id)
 
         assert poll is not None
         created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
         embed = _build_poll_embed(poll, options, vote_counts, self._embed_color, created_by_name)
-        new_view = EvalVoteView(
+        new_view = StaffPollVoteView(
             poll_id=self._poll.id,
             options=options,
-            eval_db=self._eval_db,
+            staffpoll_db=self._staffpoll_db,
             embed_color=self._embed_color,
             is_active=poll.is_active,
             created_by=poll.created_by,
@@ -775,23 +776,23 @@ def _chunk(seq: list, size: int) -> list[list]:
     return [seq[i : i + size] for i in range(0, len(seq), size)]
 
 
-class EvalCog(commands.Cog):
+class StaffPollCog(commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
-        eval_db: EvalDatabase,
+        staffpoll_db: StaffPollDatabase,
         embed_color: int,
         staff_role_id: int,
     ) -> None:
         self.bot = bot
-        self.eval_db = eval_db
+        self.staffpoll_db = staffpoll_db
         self.embed_color = embed_color
         self.staff_role_id = staff_role_id
 
     async def cog_unload(self) -> None:
-        await self.eval_db.close()
+        await self.staffpoll_db.close()
 
-    eval = app_commands.Group(name="eval", description="Staff team evaluation polls")
+    staffpoll = app_commands.Group(name="poll", description="Staff team evaluation polls")
 
     async def _staff_check(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
@@ -818,39 +819,39 @@ class EvalCog(commands.Cog):
 
     # ---- commands ----
 
-    @eval.command(name="create", description="Create a new evaluation poll in this channel")
-    async def eval_create(self, interaction: discord.Interaction) -> None:
+    @staffpoll.command(name="create", description="Create a new staff poll in this channel")
+    async def staffpoll_create(self, interaction: discord.Interaction) -> None:
         await self._staff_check(interaction)
-        modal = CreateEvalModal(eval_db=self.eval_db, embed_color=self.embed_color)
+        modal = CreateStaffPollModal(staffpoll_db=self.staffpoll_db, embed_color=self.embed_color)
         await interaction.response.send_modal(modal)
 
-    @eval.command(name="edit", description="Edit a poll's title, description, or option labels")
+    @staffpoll.command(name="edit", description="Edit a poll's title, description, or option labels")
     @app_commands.describe(id="ID of the poll to edit")
-    async def eval_edit(self, interaction: discord.Interaction, id: int) -> None:
+    async def staffpoll_edit(self, interaction: discord.Interaction, id: int) -> None:
         await self._staff_check(interaction)
 
-        poll = await self.eval_db.get_poll(id)
+        poll = await self.staffpoll_db.get_poll(id)
         if poll is None:
             await interaction.response.send_message(
                 f"No poll found with ID `{id}`.", ephemeral=True
             )
             return
 
-        options = await self.eval_db.get_options(id)
-        modal = EditEvalModal(
-            eval_db=self.eval_db,
+        options = await self.staffpoll_db.get_options(id)
+        modal = EditStaffPollModal(
+            staffpoll_db=self.staffpoll_db,
             embed_color=self.embed_color,
             poll=poll,
             options=options,
         )
         await interaction.response.send_modal(modal)
 
-    @eval.command(name="delete", description="Close and disable an evaluation poll")
+    @staffpoll.command(name="delete", description="Close and disable a staff poll")
     @app_commands.describe(id="ID of the poll to close")
-    async def eval_delete(self, interaction: discord.Interaction, id: int) -> None:
+    async def staffpoll_delete(self, interaction: discord.Interaction, id: int) -> None:
         await self._staff_check(interaction)
 
-        poll = await self.eval_db.get_poll(id)
+        poll = await self.staffpoll_db.get_poll(id)
         if poll is None:
             await interaction.response.send_message(
                 f"No poll found with ID `{id}`.", ephemeral=True
@@ -863,19 +864,19 @@ class EvalCog(commands.Cog):
             )
             return
 
-        await self.eval_db.disable_poll(id)
+        await self.staffpoll_db.disable_poll(id)
 
-        options = await self.eval_db.get_options(id)
-        vote_counts = await self.eval_db.get_vote_counts(id)
-        closed_poll = await self.eval_db.get_poll(id)
+        options = await self.staffpoll_db.get_options(id)
+        vote_counts = await self.staffpoll_db.get_vote_counts(id)
+        closed_poll = await self.staffpoll_db.get_poll(id)
 
         assert closed_poll is not None
         created_by_name = await _resolve_username(self.bot, closed_poll.created_by)
         embed = _build_poll_embed(closed_poll, options, vote_counts, self.embed_color, created_by_name)
-        closed_view = EvalVoteView(
+        closed_view = StaffPollVoteView(
             poll_id=id,
             options=options,
-            eval_db=self.eval_db,
+            staffpoll_db=self.staffpoll_db,
             embed_color=self.embed_color,
             is_active=False,
             created_by=poll.created_by,
@@ -905,20 +906,20 @@ class EvalCog(commands.Cog):
         )
         await interaction.response.send_message(embed=confirm, ephemeral=True)
 
-    @eval.command(name="list", description="List evaluation polls")
+    @staffpoll.command(name="list", description="List staff polls")
     @app_commands.describe(filter="Show active polls only, or all polls")
-    async def eval_list(
+    async def staffpoll_list(
         self,
         interaction: discord.Interaction,
         filter: Literal["active", "all"] = "active",
     ) -> None:
         await self._staff_check(interaction)
 
-        polls = await self.eval_db.list_polls(active_only=(filter == "active"))
+        polls = await self.staffpoll_db.list_polls(active_only=(filter == "active"))
         if not polls:
             label = "active " if filter == "active" else ""
             await interaction.response.send_message(
-                f"No {label}evaluation polls found.", ephemeral=True
+                f"No {label}staff polls found.", ephemeral=True
             )
             return
 
@@ -927,7 +928,7 @@ class EvalCog(commands.Cog):
 
         for page_index, chunk in enumerate(_chunk(polls, 10), start=1):
             embed = discord.Embed(
-                title="Evaluation polls",
+                title="Staff polls",
                 color=self.embed_color,
                 description=(
                     f"**Total:** `{len(polls)}`\n"
@@ -951,20 +952,20 @@ class EvalCog(commands.Cog):
         view = PagedEmbedsView(pages, author_id=interaction.user.id)
         await interaction.response.send_message(embed=pages[0], view=view, ephemeral=True)
 
-    @eval.command(name="view", description="View results and details for a poll")
+    @staffpoll.command(name="view", description="View results and details for a poll")
     @app_commands.describe(id="ID of the poll to view")
-    async def eval_view(self, interaction: discord.Interaction, id: int) -> None:
+    async def staffpoll_view(self, interaction: discord.Interaction, id: int) -> None:
         await self._staff_check(interaction)
 
-        poll = await self.eval_db.get_poll(id)
+        poll = await self.staffpoll_db.get_poll(id)
         if poll is None:
             await interaction.response.send_message(
                 f"No poll found with ID `{id}`.", ephemeral=True
             )
             return
 
-        options = await self.eval_db.get_options(id)
-        vote_counts = await self.eval_db.get_vote_counts(id)
+        options = await self.staffpoll_db.get_options(id)
+        vote_counts = await self.staffpoll_db.get_vote_counts(id)
         created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
         embed = _build_poll_embed(poll, options, vote_counts, self.embed_color, created_by_name)
 
@@ -982,41 +983,41 @@ class EvalCog(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    eval_db = EvalDatabase()
-    await eval_db.connect()
-    await eval_db.init_schema()
+    staffpoll_db = StaffPollDatabase()
+    await staffpoll_db.connect()
+    await staffpoll_db.init_schema()
 
     embed_color: int = getattr(bot, "embed_color", 0x007FFF)
     staff_role_id: int = getattr(bot, "staff_role_id", 0)
 
-    cog = EvalCog(
+    cog = StaffPollCog(
         bot=bot,
-        eval_db=eval_db,
+        staffpoll_db=staffpoll_db,
         embed_color=embed_color,
         staff_role_id=staff_role_id,
     )
     await bot.add_cog(cog)
 
     # Re-register persistent views for all polls so buttons survive restarts
-    all_polls = await eval_db.list_polls(active_only=False)
+    all_polls = await staffpoll_db.list_polls(active_only=False)
     for poll in all_polls:
-        options = await eval_db.get_options(poll.id)
+        options = await staffpoll_db.get_options(poll.id)
         if not options:
             continue
         if poll.is_active:
-            view: discord.ui.View = EvalVoteView(
+            view: discord.ui.View = StaffPollVoteView(
                 poll_id=poll.id,
                 options=options,
-                eval_db=eval_db,
+                staffpoll_db=staffpoll_db,
                 embed_color=embed_color,
                 is_active=True,
                 created_by=poll.created_by,
             )
         else:
-            view = EvalEndedView(
+            view = StaffPollEndedView(
                 poll_id=poll.id,
                 options=options,
-                eval_db=eval_db,
+                staffpoll_db=staffpoll_db,
                 embed_color=embed_color,
                 created_by=poll.created_by,
             )
