@@ -619,7 +619,7 @@ class CreateEvalModal(discord.ui.Modal, title="Create evaluation poll"):
     poll_options = discord.ui.TextInput(
         label="Options (one per line, minimum 2)",
         style=discord.TextStyle.paragraph,
-        placeholder="Yes\nNo\nAbstain",
+        placeholder="Promote\nRetain\nDemote",
         max_length=1000,
     )
 
