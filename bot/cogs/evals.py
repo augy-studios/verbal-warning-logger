@@ -263,15 +263,27 @@ def _progress_bar(pct: float, length: int = 10) -> str:
     return "█" * filled + "░" * (length - filled)
 
 
+async def _resolve_username(client: discord.Client, user_id: int) -> str:
+    user = client.get_user(user_id)
+    if user is None:
+        try:
+            user = await client.fetch_user(user_id)
+        except discord.NotFound:
+            return str(user_id)
+    return user.name
+
+
 def _build_poll_embed(
     poll: EvalPoll,
     options: list[EvalOption],
     vote_counts: dict[int, int],
     embed_color: int,
+    created_by_name: str = "",
+    final: bool = False,
 ) -> discord.Embed:
     total = sum(vote_counts.values())
     color = embed_color if poll.is_active else _CLOSED_COLOR
-    status = "Open" if poll.is_active else "Closed"
+    status = "Ended" if final else ("Open" if poll.is_active else "Closed")
 
     embed = discord.Embed(
         title=poll.title,
@@ -279,21 +291,26 @@ def _build_poll_embed(
         description=poll.description if poll.description else None,
     )
 
+    top_count = max(vote_counts.values(), default=0)
+
     for option in options:
         count = vote_counts.get(option.id, 0)
         pct = (count / total * 100) if total > 0 else 0.0
         bar = _progress_bar(pct)
-        embed.add_field(
-            name=option.label,
-            value=f"{bar} **{count}** vote{'s' if count != 1 else ''} ({pct:.1f}%)",
-            inline=False,
-        )
+        is_winner = final and top_count > 0 and count == top_count
+        field_name = f"🏆 {option.label}" if is_winner else option.label
+        vote_str = f"{count} vote{'s' if count != 1 else ''}"
+        if final:
+            field_value = f"**{bar} {vote_str} ({pct:.1f}%)**"
+        else:
+            field_value = f"{bar} **{count}** vote{'s' if count != 1 else ''} ({pct:.1f}%)"
+        embed.add_field(name=field_name, value=field_value, inline=False)
 
     embed.set_footer(
         text=(
             f"Poll #{poll.id} • {status} • "
             f"{total} total vote{'s' if total != 1 else ''} • "
-            f"Created by <@{poll.created_by}>"
+            f"Created by {created_by_name or f'<@{poll.created_by}>'}"
         )
     )
     return embed
@@ -333,6 +350,100 @@ class EvalParticipantsButton(discord.ui.Button["EvalVoteView"]):
         await self.view.handle_participants(interaction, self._poll_id)
 
 
+class EvalReopenPollButton(discord.ui.Button["EvalEndedView"]):
+    def __init__(self, poll_id: int) -> None:
+        super().__init__(
+            label="Reopen Poll",
+            style=discord.ButtonStyle.success,
+            custom_id=f"eval_reopen_{poll_id}",
+            emoji="🔓",
+        )
+        self._poll_id = poll_id
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        assert self.view is not None
+        await self.view.handle_reopen(interaction, self._poll_id)
+
+
+class EvalEndedView(discord.ui.View):
+    """Persistent view shown on a poll message after it has been ended."""
+
+    def __init__(
+        self,
+        poll_id: int,
+        options: list[EvalOption],
+        eval_db: EvalDatabase,
+        embed_color: int,
+        created_by: int,
+    ) -> None:
+        super().__init__(timeout=None)
+        self._poll_id = poll_id
+        self._options = options
+        self._eval_db = eval_db
+        self._embed_color = embed_color
+        self._created_by = created_by
+
+        self.add_item(EvalParticipantsButton(poll_id=poll_id))
+        self.add_item(EvalReopenPollButton(poll_id=poll_id))
+
+    async def handle_reopen(self, interaction: discord.Interaction, poll_id: int) -> None:
+        poll = await self._eval_db.get_poll(poll_id)
+        if poll is None:
+            await interaction.response.send_message("Poll not found.", ephemeral=True)
+            return
+
+        if interaction.user.id != poll.created_by:
+            await interaction.response.send_message(
+                "Only the poll creator can reopen this poll.", ephemeral=True
+            )
+            return
+
+        if poll.is_active:
+            await interaction.response.send_message(
+                "This poll is already open.", ephemeral=True
+            )
+            return
+
+        await self._eval_db.conn.execute(
+            "UPDATE eval_polls SET is_active = 1 WHERE id = ?", (poll_id,)
+        )
+        await self._eval_db.conn.commit()
+
+        options = await self._eval_db.get_options(poll_id)
+        reopened_poll = await self._eval_db.get_poll(poll_id)
+        assert reopened_poll is not None
+
+        vote_counts = await self._eval_db.get_vote_counts(poll_id)
+        created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
+        embed = _build_poll_embed(reopened_poll, options, vote_counts, self._embed_color, created_by_name)
+
+        new_view = EvalVoteView(
+            poll_id=poll_id,
+            options=options,
+            eval_db=self._eval_db,
+            embed_color=self._embed_color,
+            is_active=True,
+            created_by=poll.created_by,
+        )
+        interaction.client.add_view(new_view)  # type: ignore[union-attr]
+        await interaction.response.edit_message(embed=embed, view=new_view)
+
+
+class EvalEndPollButton(discord.ui.Button["EvalVoteView"]):
+    def __init__(self, poll_id: int) -> None:
+        super().__init__(
+            label="End Poll",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"eval_end_{poll_id}",
+            emoji="🔒",
+        )
+        self._poll_id = poll_id
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        assert self.view is not None
+        await self.view.handle_end_poll(interaction, self._poll_id)
+
+
 class EvalVoteView(discord.ui.View):
     """Persistent vote view attached to an eval poll message."""
 
@@ -343,11 +454,13 @@ class EvalVoteView(discord.ui.View):
         eval_db: EvalDatabase,
         embed_color: int,
         is_active: bool,
+        created_by: int = 0,
     ) -> None:
         super().__init__(timeout=None)
         self._poll_id = poll_id
         self._eval_db = eval_db
         self._embed_color = embed_color
+        self._created_by = created_by
 
         for option in options:
             self.add_item(
@@ -360,6 +473,8 @@ class EvalVoteView(discord.ui.View):
             )
 
         self.add_item(EvalParticipantsButton(poll_id=poll_id))
+        if is_active:
+            self.add_item(EvalEndPollButton(poll_id=poll_id))
 
     async def handle_vote(
         self, interaction: discord.Interaction, poll_id: int, option_id: int
@@ -384,7 +499,8 @@ class EvalVoteView(discord.ui.View):
             return
 
         vote_counts = await self._eval_db.get_vote_counts(poll_id)
-        embed = _build_poll_embed(poll, options, vote_counts, self._embed_color)
+        created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
+        embed = _build_poll_embed(poll, options, vote_counts, self._embed_color, created_by_name)
         await interaction.response.edit_message(embed=embed)
 
         verb = "cast for" if result == "new" else "changed to"
@@ -443,6 +559,46 @@ class EvalVoteView(discord.ui.View):
             )
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    async def handle_end_poll(self, interaction: discord.Interaction, poll_id: int) -> None:
+        poll = await self._eval_db.get_poll(poll_id)
+        if poll is None:
+            await interaction.response.send_message("Poll not found.", ephemeral=True)
+            return
+
+        if interaction.user.id != poll.created_by:
+            await interaction.response.send_message(
+                "Only the poll creator can end this poll.", ephemeral=True
+            )
+            return
+
+        if not poll.is_active:
+            await interaction.response.send_message(
+                "This poll has already ended.", ephemeral=True
+            )
+            return
+
+        await self._eval_db.disable_poll(poll_id)
+
+        options = await self._eval_db.get_options(poll_id)
+        vote_counts = await self._eval_db.get_vote_counts(poll_id)
+        ended_poll = await self._eval_db.get_poll(poll_id)
+        assert ended_poll is not None
+
+        created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
+        embed = _build_poll_embed(
+            ended_poll, options, vote_counts, self._embed_color, created_by_name, final=True
+        )
+
+        ended_view = EvalEndedView(
+            poll_id=poll_id,
+            options=options,
+            eval_db=self._eval_db,
+            embed_color=self._embed_color,
+            created_by=poll.created_by,
+        )
+        interaction.client.add_view(ended_view)  # type: ignore[union-attr]
+        await interaction.response.edit_message(embed=embed, view=ended_view)
 
 
 # ===== MODALS =====
@@ -503,13 +659,15 @@ class CreateEvalModal(discord.ui.Modal, title="Create evaluation poll"):
         eval_options = await self._eval_db.get_options(poll_id)
 
         assert poll is not None
-        embed = _build_poll_embed(poll, eval_options, {}, self._embed_color)
+        created_by_name = interaction.user.name
+        embed = _build_poll_embed(poll, eval_options, {}, self._embed_color, created_by_name)
         view = EvalVoteView(
             poll_id=poll_id,
             options=eval_options,
             eval_db=self._eval_db,
             embed_color=self._embed_color,
             is_active=True,
+            created_by=interaction.user.id,
         )
 
         await interaction.response.send_message(embed=embed, view=view)
@@ -584,13 +742,15 @@ class EditEvalModal(discord.ui.Modal, title="Edit evaluation poll"):
         vote_counts = await self._eval_db.get_vote_counts(self._poll.id)
 
         assert poll is not None
-        embed = _build_poll_embed(poll, options, vote_counts, self._embed_color)
+        created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
+        embed = _build_poll_embed(poll, options, vote_counts, self._embed_color, created_by_name)
         new_view = EvalVoteView(
             poll_id=self._poll.id,
             options=options,
             eval_db=self._eval_db,
             embed_color=self._embed_color,
             is_active=poll.is_active,
+            created_by=poll.created_by,
         )
 
         updated = False
@@ -711,13 +871,15 @@ class EvalCog(commands.Cog):
         closed_poll = await self.eval_db.get_poll(id)
 
         assert closed_poll is not None
-        embed = _build_poll_embed(closed_poll, options, vote_counts, self.embed_color)
+        created_by_name = await _resolve_username(self.bot, closed_poll.created_by)
+        embed = _build_poll_embed(closed_poll, options, vote_counts, self.embed_color, created_by_name)
         closed_view = EvalVoteView(
             poll_id=id,
             options=options,
             eval_db=self.eval_db,
             embed_color=self.embed_color,
             is_active=False,
+            created_by=poll.created_by,
         )
 
         updated = False
@@ -804,7 +966,8 @@ class EvalCog(commands.Cog):
 
         options = await self.eval_db.get_options(id)
         vote_counts = await self.eval_db.get_vote_counts(id)
-        embed = _build_poll_embed(poll, options, vote_counts, self.embed_color)
+        created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
+        embed = _build_poll_embed(poll, options, vote_counts, self.embed_color, created_by_name)
 
         if poll.channel_id and poll.message_id:
             embed.add_field(
@@ -835,16 +998,27 @@ async def setup(bot: commands.Bot) -> None:
     )
     await bot.add_cog(cog)
 
-    # Re-register persistent vote views for all active polls so buttons survive restarts
-    polls = await eval_db.list_polls(active_only=True)
-    for poll in polls:
+    # Re-register persistent views for all polls so buttons survive restarts
+    all_polls = await eval_db.list_polls(active_only=False)
+    for poll in all_polls:
         options = await eval_db.get_options(poll.id)
-        if options:
-            view = EvalVoteView(
+        if not options:
+            continue
+        if poll.is_active:
+            view: discord.ui.View = EvalVoteView(
                 poll_id=poll.id,
                 options=options,
                 eval_db=eval_db,
                 embed_color=embed_color,
                 is_active=True,
+                created_by=poll.created_by,
             )
-            bot.add_view(view)
+        else:
+            view = EvalEndedView(
+                poll_id=poll.id,
+                options=options,
+                eval_db=eval_db,
+                embed_color=embed_color,
+                created_by=poll.created_by,
+            )
+        bot.add_view(view)
