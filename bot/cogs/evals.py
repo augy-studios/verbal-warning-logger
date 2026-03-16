@@ -319,6 +319,57 @@ def _build_poll_embed(
 # ===== UI =====
 
 
+async def _send_participants(interaction: discord.Interaction, eval_db: EvalDatabase, poll_id: int, embed_color: int) -> None:
+    poll = await eval_db.get_poll(poll_id)
+    if poll is None:
+        await interaction.response.send_message("Poll not found.", ephemeral=True)
+        return
+
+    options = await eval_db.get_options(poll_id)
+    all_votes = await eval_db.get_all_votes(poll_id)
+
+    by_option: dict[int, list[int]] = {o.id: [] for o in options}
+    for user_id, option_id in all_votes:
+        if option_id in by_option:
+            by_option[option_id].append(user_id)
+
+    total = len(all_votes)
+    status = "Open" if poll.is_active else "Closed"
+    embed = discord.Embed(
+        title=f"Participants — {poll.title}",
+        color=embed_color if poll.is_active else _CLOSED_COLOR,
+        description=(
+            f"**Poll #{poll.id}** • {status} • "
+            f"**{total}** participant{'s' if total != 1 else ''}"
+        ),
+    )
+
+    for option in options:
+        voters = by_option.get(option.id, [])
+        count = len(voters)
+        if voters:
+            mentions: list[str] = []
+            running = 0
+            for uid in voters:
+                mention = f"<@{uid}>"
+                if running + len(mention) + 2 > 950:
+                    mentions.append(f"*…and {count - len(mentions)} more*")
+                    break
+                mentions.append(mention)
+                running += len(mention) + 2
+            value = ", ".join(mentions)
+        else:
+            value = "*No votes yet*"
+
+        embed.add_field(
+            name=f"{option.label} ({count} vote{'s' if count != 1 else ''})",
+            value=value,
+            inline=False,
+        )
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 class EvalVoteButton(discord.ui.Button["EvalVoteView"]):
     def __init__(self, option_id: int, label: str, poll_id: int, is_active: bool) -> None:
         super().__init__(
@@ -347,7 +398,7 @@ class EvalParticipantsButton(discord.ui.Button["EvalVoteView"]):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert self.view is not None
-        await self.view.handle_participants(interaction, self._poll_id)
+        await _send_participants(interaction, self.view._eval_db, self._poll_id, self.view._embed_color)
 
 
 class EvalReopenPollButton(discord.ui.Button["EvalEndedView"]):
@@ -507,58 +558,6 @@ class EvalVoteView(discord.ui.View):
         await interaction.followup.send(
             f"Your vote has been {verb} **{label}**.", ephemeral=True
         )
-
-    async def handle_participants(self, interaction: discord.Interaction, poll_id: int) -> None:
-        poll = await self._eval_db.get_poll(poll_id)
-        if poll is None:
-            await interaction.response.send_message("Poll not found.", ephemeral=True)
-            return
-
-        options = await self._eval_db.get_options(poll_id)
-        all_votes = await self._eval_db.get_all_votes(poll_id)
-
-        # Group user_ids by option_id
-        by_option: dict[int, list[int]] = {o.id: [] for o in options}
-        for user_id, option_id in all_votes:
-            if option_id in by_option:
-                by_option[option_id].append(user_id)
-
-        total = len(all_votes)
-        status = "Open" if poll.is_active else "Closed"
-        embed = discord.Embed(
-            title=f"Participants — {poll.title}",
-            color=self._embed_color if poll.is_active else _CLOSED_COLOR,
-            description=(
-                f"**Poll #{poll.id}** • {status} • "
-                f"**{total}** participant{'s' if total != 1 else ''}"
-            ),
-        )
-
-        for option in options:
-            voters = by_option.get(option.id, [])
-            count = len(voters)
-            if voters:
-                # Build mention list; truncate if it would exceed the 1024-char field limit
-                mentions: list[str] = []
-                running = 0
-                for uid in voters:
-                    mention = f"<@{uid}>"
-                    if running + len(mention) + 2 > 950:
-                        mentions.append(f"*…and {count - len(mentions)} more*")
-                        break
-                    mentions.append(mention)
-                    running += len(mention) + 2
-                value = ", ".join(mentions)
-            else:
-                value = "*No votes yet*"
-
-            embed.add_field(
-                name=f"{option.label} ({count} vote{'s' if count != 1 else ''})",
-                value=value,
-                inline=False,
-            )
-
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     async def handle_end_poll(self, interaction: discord.Interaction, poll_id: int) -> None:
         poll = await self._eval_db.get_poll(poll_id)
