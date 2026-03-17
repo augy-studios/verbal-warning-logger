@@ -131,15 +131,30 @@ class StaffPollDatabase:
         )
         return _row_to_poll(await cur.fetchone())
 
-    async def list_polls(self, active_only: bool = False) -> list[StaffPollPoll]:
+    async def list_polls(
+        self,
+        active_only: bool = False,
+        channel_id: Optional[int] = None,
+        created_by: Optional[int] = None,
+    ) -> list[StaffPollPoll]:
+        conditions: list[str] = []
+        params: list[int] = []
+        if active_only:
+            conditions.append("is_active = 1")
+        if channel_id is not None:
+            conditions.append("channel_id = ?")
+            params.append(channel_id)
+        if created_by is not None:
+            conditions.append("created_by = ?")
+            params.append(created_by)
         sql = (
             "SELECT id, title, description, created_at, created_by, channel_id, message_id, is_active "
             "FROM staffpoll_polls"
         )
-        if active_only:
-            sql += " WHERE is_active = 1"
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
         sql += " ORDER BY id DESC"
-        cur = await self.conn.execute(sql)
+        cur = await self.conn.execute(sql, params)
         return [p for p in (_row_to_poll(r) for r in await cur.fetchall()) if p is not None]
 
     async def update_poll(self, poll_id: int, title: str, description: str) -> int:
@@ -624,10 +639,16 @@ class CreateStaffPollModal(discord.ui.Modal, title="Create staff poll"):
         max_length=1000,
     )
 
-    def __init__(self, staffpoll_db: StaffPollDatabase, embed_color: int) -> None:
+    def __init__(
+        self,
+        staffpoll_db: StaffPollDatabase,
+        embed_color: int,
+        target_channel: discord.TextChannel,
+    ) -> None:
         super().__init__(timeout=300)
         self._staffpoll_db = staffpoll_db
         self._embed_color = embed_color
+        self._target_channel = target_channel
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         title = self.poll_title.value.strip()
@@ -670,12 +691,17 @@ class CreateStaffPollModal(discord.ui.Modal, title="Create staff poll"):
             created_by=interaction.user.id,
         )
 
-        await interaction.response.send_message(embed=embed, view=view)
-        msg = await interaction.original_response()
+        await interaction.response.defer(ephemeral=True)
+        msg = await self._target_channel.send(embed=embed, view=view)
         await self._staffpoll_db.set_poll_message(poll_id, msg.channel.id, msg.id)
-
-        # Register for persistence across restarts
         interaction.client.add_view(view)  # type: ignore[union-attr]
+
+        confirm = (
+            f"Poll created in {self._target_channel.mention}!"
+            if self._target_channel.id != interaction.channel_id
+            else "Poll created!"
+        )
+        await interaction.followup.send(confirm, ephemeral=True)
 
 
 class EditStaffPollModal(discord.ui.Modal, title="Edit staff poll"):
@@ -819,10 +845,25 @@ class StaffPollCog(commands.Cog):
 
     # ---- commands ----
 
-    @staffpoll.command(name="create", description="Create a new staff poll in this channel")
-    async def staffpoll_create(self, interaction: discord.Interaction) -> None:
+    @staffpoll.command(name="create", description="Create a new staff poll")
+    @app_commands.describe(channel="Channel to post the poll in (defaults to current channel)")
+    async def staffpoll_create(
+        self,
+        interaction: discord.Interaction,
+        channel: Optional[discord.TextChannel] = None,
+    ) -> None:
         await self._staff_check(interaction)
-        modal = CreateStaffPollModal(staffpoll_db=self.staffpoll_db, embed_color=self.embed_color)
+        target = channel or interaction.channel
+        if not isinstance(target, discord.TextChannel):
+            await interaction.response.send_message(
+                "Please specify a text channel or run this in one.", ephemeral=True
+            )
+            return
+        modal = CreateStaffPollModal(
+            staffpoll_db=self.staffpoll_db,
+            embed_color=self.embed_color,
+            target_channel=target,
+        )
         await interaction.response.send_modal(modal)
 
     @staffpoll.command(name="edit", description="Edit a poll's title, description, or option labels")
@@ -907,15 +948,25 @@ class StaffPollCog(commands.Cog):
         await interaction.response.send_message(embed=confirm, ephemeral=True)
 
     @staffpoll.command(name="list", description="List staff polls")
-    @app_commands.describe(filter="Show active polls only, or all polls")
+    @app_commands.describe(
+        filter="Show active polls only, or all polls",
+        channel="Only show polls posted in this channel",
+        user="Only show polls created by this user",
+    )
     async def staffpoll_list(
         self,
         interaction: discord.Interaction,
         filter: Literal["active", "all"] = "active",
+        channel: Optional[discord.TextChannel] = None,
+        user: Optional[discord.Member] = None,
     ) -> None:
         await self._staff_check(interaction)
 
-        polls = await self.staffpoll_db.list_polls(active_only=(filter == "active"))
+        polls = await self.staffpoll_db.list_polls(
+            active_only=(filter == "active"),
+            channel_id=channel.id if channel else None,
+            created_by=user.id if user else None,
+        )
         if not polls:
             label = "active " if filter == "active" else ""
             await interaction.response.send_message(
@@ -926,22 +977,30 @@ class StaffPollCog(commands.Cog):
         pages: list[discord.Embed] = []
         total_pages = (len(polls) - 1) // 10 + 1
 
+        filter_parts = [f"`{filter}`"]
+        if channel:
+            filter_parts.append(f"channel: {channel.mention}")
+        if user:
+            filter_parts.append(f"creator: {user.mention}")
+
         for page_index, chunk in enumerate(_chunk(polls, 10), start=1):
             embed = discord.Embed(
                 title="Staff polls",
                 color=self.embed_color,
                 description=(
                     f"**Total:** `{len(polls)}`\n"
-                    f"**Filter:** `{filter}`\n"
+                    f"**Filter:** {', '.join(filter_parts)}\n"
                     f"**Page:** `{page_index}/{total_pages}`"
                 ),
             )
             for p in chunk:
                 status = "Open" if p.is_active else "Closed"
+                channel_str = f"<#{p.channel_id}>" if p.channel_id else "Unknown"
                 embed.add_field(
                     name=f"#{p.id} — {p.title}",
                     value=(
                         f"**Status:** {status}\n"
+                        f"**Channel:** {channel_str}\n"
                         f"**Created:** {p.created_at}\n"
                         f"**By:** <@{p.created_by}>"
                     ),
