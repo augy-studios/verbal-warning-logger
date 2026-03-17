@@ -47,6 +47,7 @@ class VerbalWarningsBot(commands.Bot):
         await self.load_extension("bot.cogs.verbal")
         await self.load_extension("bot.cogs.utility")
         await self.load_extension("bot.cogs.polls")
+        await self.load_extension("bot.cogs.polls_template")
 
         # Sync commands globally (can take time) — you can switch to guild sync during dev.
         await self.tree.sync()
