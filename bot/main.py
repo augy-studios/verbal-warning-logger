@@ -44,6 +44,7 @@ class VerbalWarningsBot(commands.Bot):
         await self.db.init_schema()
 
         # Load cogs
+        await self.load_extension("bot.cogs.help")
         await self.load_extension("bot.cogs.verbal")
         await self.load_extension("bot.cogs.utility")
         await self.load_extension("bot.cogs.polls")
