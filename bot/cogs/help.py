@@ -31,12 +31,12 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
             (
                 "/verbal delete <id>",
                 "Permanently delete a verbal warning by its ID.",
-                "/verbal delete 42",
+                "/verbal delete 67",
             ),
             (
                 "/verbal edit <id>",
                 "Edit a warning's user, mod, evidence link, or reason via a pre-filled modal.",
-                "/verbal edit 42",
+                "/verbal edit 67",
             ),
             (
                 "/verbal lb <mode>",
@@ -91,12 +91,12 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
             (
                 "/poll edit <id>",
                 "Edit a poll's title, description, or option labels via a pre-filled modal. Option count cannot change.",
-                "/poll edit 3",
+                "/poll edit 67",
             ),
             (
                 "/poll delete <id>",
                 "Close and disable a poll. Disables all voting buttons on the original message.",
-                "/poll delete 3",
+                "/poll delete 67",
             ),
             (
                 "/poll list [filter] [channel] [user]",
@@ -106,7 +106,7 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
             (
                 "/poll view <id>",
                 "View a poll's live results and a jump link to the message, shown only to you.",
-                "/poll view 3",
+                "/poll view 67",
             ),
         ],
     ),
@@ -121,17 +121,17 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
             (
                 "/poll_template from_poll <poll_id>",
                 "Convert an existing poll into a template, pre-filling the modal with its data.",
-                "/poll_template from_poll 5",
+                "/poll_template from_poll 67",
             ),
             (
                 "/poll_template edit <id>",
                 "Edit a template's name, description, or option labels. Option count cannot change.",
-                "/poll_template edit 2",
+                "/poll_template edit 67",
             ),
             (
                 "/poll_template delete <id>",
                 "Soft-delete a template so it no longer appears in listings.",
-                "/poll_template delete 2",
+                "/poll_template delete 67",
             ),
             (
                 "/poll_template list [filter]",
@@ -141,17 +141,17 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
             (
                 "/poll_template view <id>",
                 "View a template's full details — name, description, all options, and status.",
-                "/poll_template view 2",
+                "/poll_template view 67",
             ),
             (
                 "/poll_template preview <id>",
                 "See an ephemeral preview of what a poll from this template would look like.",
-                "/poll_template preview 2",
+                "/poll_template preview 67",
             ),
             (
                 "/poll_template use <id> [channel]",
                 "Open a pre-filled modal to review and edit the template before posting it as a live poll.",
-                "/poll_template use 2 #staff-polls",
+                "/poll_template use 67 #staff-polls",
             ),
         ],
     ),
