@@ -149,15 +149,9 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
                 "/poll_template preview 67",
             ),
             (
-<<<<<<< HEAD
                 "/poll_template use <id> [channel] [anonymous] [max_votes]",
                 "Open a pre-filled modal to review and edit the template before posting it as a live poll. `anonymous` and `max_votes` override the template's stored settings.",
                 "/poll_template use 2 #staff-polls anonymous:True max_votes:10",
-=======
-                "/poll_template use <id> [channel]",
-                "Open a pre-filled modal to review and edit the template before posting it as a live poll.",
-                "/poll_template use 67 #staff-polls",
->>>>>>> a51bfa4c49748fce51d4d6f41345739d18663639
             ),
         ],
     ),
