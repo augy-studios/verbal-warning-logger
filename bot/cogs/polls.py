@@ -24,6 +24,8 @@ class StaffPollPoll:
     channel_id: int
     message_id: int
     is_active: bool
+    is_anonymous: bool
+    max_votes: int
 
 
 @dataclass(slots=True)
@@ -62,17 +64,31 @@ class StaffPollDatabase:
         await self.conn.execute(
             """
             CREATE TABLE IF NOT EXISTS staffpoll_polls (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                title       TEXT    NOT NULL,
-                description TEXT    NOT NULL DEFAULT '',
-                created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
-                created_by  INTEGER NOT NULL,
-                channel_id  INTEGER NOT NULL DEFAULT 0,
-                message_id  INTEGER NOT NULL DEFAULT 0,
-                is_active   INTEGER NOT NULL DEFAULT 1
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                title        TEXT    NOT NULL,
+                description  TEXT    NOT NULL DEFAULT '',
+                created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+                created_by   INTEGER NOT NULL,
+                channel_id   INTEGER NOT NULL DEFAULT 0,
+                message_id   INTEGER NOT NULL DEFAULT 0,
+                is_active    INTEGER NOT NULL DEFAULT 1,
+                is_anonymous INTEGER NOT NULL DEFAULT 0,
+                max_votes    INTEGER NOT NULL DEFAULT 0
             )
             """
         )
+        # Migrate existing databases that predate these columns
+        for col, definition in (
+            ("is_anonymous", "INTEGER NOT NULL DEFAULT 0"),
+            ("max_votes", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            try:
+                await self.conn.execute(
+                    f"ALTER TABLE staffpoll_polls ADD COLUMN {col} {definition}"
+                )
+                await self.conn.commit()
+            except Exception:
+                pass  # column already exists
         await self.conn.execute(
             """
             CREATE TABLE IF NOT EXISTS staffpoll_options (
@@ -108,10 +124,18 @@ class StaffPollDatabase:
 
     # ---- polls ----
 
-    async def create_poll(self, title: str, description: str, created_by: int) -> int:
+    async def create_poll(
+        self,
+        title: str,
+        description: str,
+        created_by: int,
+        is_anonymous: bool = False,
+        max_votes: int = 0,
+    ) -> int:
         cur = await self.conn.execute(
-            "INSERT INTO staffpoll_polls (title, description, created_by) VALUES (?, ?, ?)",
-            (title, description, created_by),
+            "INSERT INTO staffpoll_polls (title, description, created_by, is_anonymous, max_votes) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (title, description, created_by, int(is_anonymous), max_votes),
         )
         await self.conn.commit()
         return int(cur.lastrowid)
@@ -125,7 +149,8 @@ class StaffPollDatabase:
 
     async def get_poll(self, poll_id: int) -> Optional[StaffPollPoll]:
         cur = await self.conn.execute(
-            "SELECT id, title, description, created_at, created_by, channel_id, message_id, is_active "
+            "SELECT id, title, description, created_at, created_by, channel_id, message_id, "
+            "is_active, is_anonymous, max_votes "
             "FROM staffpoll_polls WHERE id = ?",
             (poll_id,),
         )
@@ -148,7 +173,8 @@ class StaffPollDatabase:
             conditions.append("created_by = ?")
             params.append(created_by)
         sql = (
-            "SELECT id, title, description, created_at, created_by, channel_id, message_id, is_active "
+            "SELECT id, title, description, created_at, created_by, channel_id, message_id, "
+            "is_active, is_anonymous, max_votes "
             "FROM staffpoll_polls"
         )
         if conditions:
@@ -270,6 +296,8 @@ def _row_to_poll(row: aiosqlite.Row | None) -> Optional[StaffPollPoll]:
         channel_id=int(row["channel_id"]),
         message_id=int(row["message_id"]),
         is_active=bool(row["is_active"]),
+        is_anonymous=bool(row["is_anonymous"]),
+        max_votes=int(row["max_votes"]),
     )
 
 
@@ -325,13 +353,17 @@ def _build_poll_embed(
             field_value = f"{bar} **{count}** vote{'s' if count != 1 else ''} ({pct:.1f}%)"
         embed.add_field(name=field_name, value=field_value, inline=False)
 
-    embed.set_footer(
-        text=(
-            f"Poll #{poll.id} • {status} • "
-            f"{total} total vote{'s' if total != 1 else ''} • "
-            f"Created by {created_by_name or f'<@{poll.created_by}>'}"
-        )
-    )
+    footer_parts = [
+        f"Poll #{poll.id}",
+        status,
+        f"{total} total vote{'s' if total != 1 else ''}",
+        f"Created by {created_by_name or str(poll.created_by)}",
+    ]
+    if poll.is_anonymous:
+        footer_parts.append("Anonymous")
+    if poll.max_votes > 0:
+        footer_parts.append(f"Max votes: {poll.max_votes}")
+    embed.set_footer(text=" • ".join(footer_parts))
     return embed
 
 
@@ -445,6 +477,7 @@ class StaffPollEndedView(discord.ui.View):
         staffpoll_db: StaffPollDatabase,
         embed_color: int,
         created_by: int,
+        is_anonymous: bool = False,
     ) -> None:
         super().__init__(timeout=None)
         self._poll_id = poll_id
@@ -452,8 +485,10 @@ class StaffPollEndedView(discord.ui.View):
         self._staffpoll_db = staffpoll_db
         self._embed_color = embed_color
         self._created_by = created_by
+        self._is_anonymous = is_anonymous
 
-        self.add_item(StaffPollParticipantsButton(poll_id=poll_id))
+        if not is_anonymous:
+            self.add_item(StaffPollParticipantsButton(poll_id=poll_id))
         self.add_item(StaffPollReopenPollButton(poll_id=poll_id))
 
     async def handle_reopen(self, interaction: discord.Interaction, poll_id: int) -> None:
@@ -494,6 +529,8 @@ class StaffPollEndedView(discord.ui.View):
             embed_color=self._embed_color,
             is_active=True,
             created_by=poll.created_by,
+            is_anonymous=reopened_poll.is_anonymous,
+            max_votes=reopened_poll.max_votes,
         )
         interaction.client.add_view(new_view)  # type: ignore[union-attr]
         await interaction.response.edit_message(embed=embed, view=new_view)
@@ -525,12 +562,16 @@ class StaffPollVoteView(discord.ui.View):
         embed_color: int,
         is_active: bool,
         created_by: int = 0,
+        is_anonymous: bool = False,
+        max_votes: int = 0,
     ) -> None:
         super().__init__(timeout=None)
         self._poll_id = poll_id
         self._staffpoll_db = staffpoll_db
         self._embed_color = embed_color
         self._created_by = created_by
+        self._is_anonymous = is_anonymous
+        self._max_votes = max_votes
 
         for option in options:
             self.add_item(
@@ -542,7 +583,8 @@ class StaffPollVoteView(discord.ui.View):
                 )
             )
 
-        self.add_item(StaffPollParticipantsButton(poll_id=poll_id))
+        if not is_anonymous:
+            self.add_item(StaffPollParticipantsButton(poll_id=poll_id))
         if is_active:
             self.add_item(StaffPollEndPollButton(poll_id=poll_id))
 
@@ -564,15 +606,46 @@ class StaffPollVoteView(discord.ui.View):
 
         vote_counts = await self._staffpoll_db.get_vote_counts(poll_id)
         created_by_name = await _resolve_username(interaction.client, poll.created_by)  # type: ignore[arg-type]
-        embed = _build_poll_embed(poll, options, vote_counts, self._embed_color, created_by_name)
-        await interaction.response.edit_message(embed=embed)
 
-        if result == "removed":
-            confirmation = f"Your vote for **{label}** has been removed."
-        elif result == "new":
-            confirmation = f"Your vote has been cast for **{label}**."
+        # Auto-end when max_votes is set and the new total meets or exceeds it
+        total_votes = sum(vote_counts.values())
+        should_auto_end = (
+            self._max_votes > 0
+            and result == "new"
+            and total_votes >= self._max_votes
+        )
+
+        if should_auto_end:
+            await self._staffpoll_db.disable_poll(poll_id)
+            ended_poll = await self._staffpoll_db.get_poll(poll_id)
+            assert ended_poll is not None
+            embed = _build_poll_embed(
+                ended_poll, options, vote_counts, self._embed_color, created_by_name, final=True
+            )
+            ended_view = StaffPollEndedView(
+                poll_id=poll_id,
+                options=options,
+                staffpoll_db=self._staffpoll_db,
+                embed_color=self._embed_color,
+                created_by=poll.created_by,
+                is_anonymous=self._is_anonymous,
+            )
+            interaction.client.add_view(ended_view)  # type: ignore[union-attr]
+            await interaction.response.edit_message(embed=embed, view=ended_view)
+            confirmation = (
+                f"Your vote has been cast for **{label}**. "
+                f"The poll has ended — max votes ({self._max_votes}) reached."
+            )
         else:
-            confirmation = f"Your vote has been changed to **{label}**."
+            embed = _build_poll_embed(poll, options, vote_counts, self._embed_color, created_by_name)
+            await interaction.response.edit_message(embed=embed)
+            if result == "removed":
+                confirmation = f"Your vote for **{label}** has been removed."
+            elif result == "new":
+                confirmation = f"Your vote has been cast for **{label}**."
+            else:
+                confirmation = f"Your vote has been changed to **{label}**."
+
         await interaction.followup.send(confirmation, ephemeral=True)
 
     async def handle_end_poll(self, interaction: discord.Interaction, poll_id: int) -> None:
@@ -644,11 +717,15 @@ class CreateStaffPollModal(discord.ui.Modal, title="Create staff poll"):
         staffpoll_db: StaffPollDatabase,
         embed_color: int,
         target_channel: discord.TextChannel,
+        is_anonymous: bool = False,
+        max_votes: int = 0,
     ) -> None:
         super().__init__(timeout=300)
         self._staffpoll_db = staffpoll_db
         self._embed_color = embed_color
         self._target_channel = target_channel
+        self._is_anonymous = is_anonymous
+        self._max_votes = max_votes
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         title = self.poll_title.value.strip()
@@ -673,7 +750,10 @@ class CreateStaffPollModal(discord.ui.Modal, title="Create staff poll"):
             )
             return
 
-        poll_id = await self._staffpoll_db.create_poll(title, description, interaction.user.id)
+        poll_id = await self._staffpoll_db.create_poll(
+            title, description, interaction.user.id,
+            is_anonymous=self._is_anonymous, max_votes=self._max_votes,
+        )
         await self._staffpoll_db.add_options(poll_id, options)
 
         poll = await self._staffpoll_db.get_poll(poll_id)
@@ -689,6 +769,8 @@ class CreateStaffPollModal(discord.ui.Modal, title="Create staff poll"):
             embed_color=self._embed_color,
             is_active=True,
             created_by=interaction.user.id,
+            is_anonymous=self._is_anonymous,
+            max_votes=self._max_votes,
         )
 
         await interaction.response.defer(ephemeral=True)
@@ -846,13 +928,24 @@ class StaffPollCog(commands.Cog):
     # ---- commands ----
 
     @staffpoll.command(name="create", description="Create a new staff poll")
-    @app_commands.describe(channel="Channel to post the poll in (defaults to current channel)")
+    @app_commands.describe(
+        channel="Channel to post the poll in (defaults to current channel)",
+        anonymous="Hide voter identities and remove the Participants button (default: False)",
+        max_votes="Auto-end the poll after this many votes are cast (0 = unlimited)",
+    )
     async def staffpoll_create(
         self,
         interaction: discord.Interaction,
         channel: Optional[discord.TextChannel] = None,
+        anonymous: bool = False,
+        max_votes: int = 0,
     ) -> None:
         await self._staff_check(interaction)
+        if max_votes < 0:
+            await interaction.response.send_message(
+                "`max_votes` must be 0 (unlimited) or a positive number.", ephemeral=True
+            )
+            return
         target = channel or interaction.channel
         if not isinstance(target, discord.TextChannel):
             await interaction.response.send_message(
@@ -863,6 +956,8 @@ class StaffPollCog(commands.Cog):
             staffpoll_db=self.staffpoll_db,
             embed_color=self.embed_color,
             target_channel=target,
+            is_anonymous=anonymous,
+            max_votes=max_votes,
         )
         await interaction.response.send_modal(modal)
 
@@ -1071,6 +1166,8 @@ async def setup(bot: commands.Bot) -> None:
                 embed_color=embed_color,
                 is_active=True,
                 created_by=poll.created_by,
+                is_anonymous=poll.is_anonymous,
+                max_votes=poll.max_votes,
             )
         else:
             view = StaffPollEndedView(
@@ -1079,5 +1176,6 @@ async def setup(bot: commands.Bot) -> None:
                 staffpoll_db=staffpoll_db,
                 embed_color=embed_color,
                 created_by=poll.created_by,
+                is_anonymous=poll.is_anonymous,
             )
         bot.add_view(view)

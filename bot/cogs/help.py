@@ -84,9 +84,9 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
         "Create and manage interactive staff evaluation polls with button voting.",
         [
             (
-                "/poll create [channel]",
-                "Open a modal to create a new poll. Posts to the current channel unless `channel` is specified.",
-                "/poll create #staff-polls",
+                "/poll create [channel] [anonymous] [max_votes]",
+                "Open a modal to create a new poll. `anonymous` hides voter identities (removes Participants button). `max_votes` auto-ends the poll once that many unique votes are cast (0 = unlimited).",
+                "/poll create #staff-polls anonymous:True max_votes:10",
             ),
             (
                 "/poll edit <id>",
@@ -149,9 +149,9 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
                 "/poll_template preview 2",
             ),
             (
-                "/poll_template use <id> [channel]",
-                "Open a pre-filled modal to review and edit the template before posting it as a live poll.",
-                "/poll_template use 2 #staff-polls",
+                "/poll_template use <id> [channel] [anonymous] [max_votes]",
+                "Open a pre-filled modal to review and edit the template before posting it as a live poll. `anonymous` and `max_votes` override the template's stored settings.",
+                "/poll_template use 2 #staff-polls anonymous:True max_votes:10",
             ),
         ],
     ),

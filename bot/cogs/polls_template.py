@@ -29,6 +29,8 @@ class PollTemplate:
     created_at: str
     created_by: int
     is_deleted: bool
+    is_anonymous: bool
+    max_votes: int
 
 
 @dataclass(slots=True)
@@ -67,15 +69,28 @@ class PollTemplateDatabase:
         await self.conn.execute(
             """
             CREATE TABLE IF NOT EXISTS poll_templates (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                name        TEXT    NOT NULL,
-                description TEXT    NOT NULL DEFAULT '',
-                created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
-                created_by  INTEGER NOT NULL,
-                is_deleted  INTEGER NOT NULL DEFAULT 0
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                name         TEXT    NOT NULL,
+                description  TEXT    NOT NULL DEFAULT '',
+                created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+                created_by   INTEGER NOT NULL,
+                is_deleted   INTEGER NOT NULL DEFAULT 0,
+                is_anonymous INTEGER NOT NULL DEFAULT 0,
+                max_votes    INTEGER NOT NULL DEFAULT 0
             )
             """
         )
+        for col, definition in (
+            ("is_anonymous", "INTEGER NOT NULL DEFAULT 0"),
+            ("max_votes", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            try:
+                await self.conn.execute(
+                    f"ALTER TABLE poll_templates ADD COLUMN {col} {definition}"
+                )
+                await self.conn.commit()
+            except Exception:
+                pass  # column already exists
         await self.conn.execute(
             """
             CREATE TABLE IF NOT EXISTS poll_template_options (
@@ -94,10 +109,18 @@ class PollTemplateDatabase:
         )
         await self.conn.commit()
 
-    async def create_template(self, name: str, description: str, created_by: int) -> int:
+    async def create_template(
+        self,
+        name: str,
+        description: str,
+        created_by: int,
+        is_anonymous: bool = False,
+        max_votes: int = 0,
+    ) -> int:
         cur = await self.conn.execute(
-            "INSERT INTO poll_templates (name, description, created_by) VALUES (?, ?, ?)",
-            (name, description, created_by),
+            "INSERT INTO poll_templates (name, description, created_by, is_anonymous, max_votes) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (name, description, created_by, int(is_anonymous), max_votes),
         )
         await self.conn.commit()
         assert cur.lastrowid is not None
@@ -105,7 +128,7 @@ class PollTemplateDatabase:
 
     async def get_template(self, template_id: int) -> Optional[PollTemplate]:
         cur = await self.conn.execute(
-            "SELECT id, name, description, created_at, created_by, is_deleted "
+            "SELECT id, name, description, created_at, created_by, is_deleted, is_anonymous, max_votes "
             "FROM poll_templates WHERE id = ?",
             (template_id,),
         )
@@ -113,7 +136,7 @@ class PollTemplateDatabase:
 
     async def list_templates(self, include_deleted: bool = False) -> list[PollTemplate]:
         sql = (
-            "SELECT id, name, description, created_at, created_by, is_deleted "
+            "SELECT id, name, description, created_at, created_by, is_deleted, is_anonymous, max_votes "
             "FROM poll_templates"
         )
         if not include_deleted:
@@ -184,6 +207,8 @@ def _row_to_template(row: aiosqlite.Row | None) -> Optional[PollTemplate]:
         created_at=str(row["created_at"]),
         created_by=int(row["created_by"]),
         is_deleted=bool(row["is_deleted"]),
+        is_anonymous=bool(row["is_anonymous"]),
+        max_votes=int(row["max_votes"]),
     )
 
 
@@ -208,12 +233,16 @@ def _build_template_detail_embed(
         value="\n".join(f"`{i + 1}.` {o.label}" for i, o in enumerate(options)) or "*None*",
         inline=False,
     )
-    embed.set_footer(
-        text=(
-            f"Status: {status} • Created: {template.created_at} • "
-            f"Created by {created_by_name or str(template.created_by)}"
-        )
-    )
+    footer_parts = [
+        f"Status: {status}",
+        f"Created: {template.created_at}",
+        f"Created by {created_by_name or str(template.created_by)}",
+    ]
+    if template.is_anonymous:
+        footer_parts.append("Anonymous")
+    if template.max_votes > 0:
+        footer_parts.append(f"Max votes: {template.max_votes}")
+    embed.set_footer(text=" • ".join(footer_parts))
     return embed
 
 
@@ -235,12 +264,15 @@ def _build_template_preview_embed(
             inline=False,
         )
     embed.set_author(name="Preview — this is not a live poll")
-    embed.set_footer(
-        text=(
-            f"Template #{template.id} • "
-            f"Created by {created_by_name or str(template.created_by)}"
-        )
-    )
+    footer_parts = [
+        f"Template #{template.id}",
+        f"Created by {created_by_name or str(template.created_by)}",
+    ]
+    if template.is_anonymous:
+        footer_parts.append("Anonymous")
+    if template.max_votes > 0:
+        footer_parts.append(f"Max votes: {template.max_votes}")
+    embed.set_footer(text=" • ".join(footer_parts))
     return embed
 
 
@@ -388,11 +420,15 @@ class UseTemplateModal(discord.ui.Modal, title="Create poll from template"):
         prefill_name: str,
         prefill_description: str,
         prefill_options: list[str],
+        is_anonymous: bool = False,
+        max_votes: int = 0,
     ) -> None:
         super().__init__(timeout=300)
         self._staffpoll_db = staffpoll_db
         self._embed_color = embed_color
         self._target_channel = target_channel
+        self._is_anonymous = is_anonymous
+        self._max_votes = max_votes
         self.poll_title.default = prefill_name[:200]
         self.poll_description.default = prefill_description[:500]
         self.poll_options.default = "\n".join(prefill_options)
@@ -407,7 +443,10 @@ class UseTemplateModal(discord.ui.Modal, title="Create poll from template"):
             await interaction.response.send_message(error, ephemeral=True)
             return
 
-        poll_id = await self._staffpoll_db.create_poll(title, description, interaction.user.id)
+        poll_id = await self._staffpoll_db.create_poll(
+            title, description, interaction.user.id,
+            is_anonymous=self._is_anonymous, max_votes=self._max_votes,
+        )
         await self._staffpoll_db.add_options(poll_id, options)
 
         poll = await self._staffpoll_db.get_poll(poll_id)
@@ -424,6 +463,8 @@ class UseTemplateModal(discord.ui.Modal, title="Create poll from template"):
             embed_color=self._embed_color,
             is_active=True,
             created_by=interaction.user.id,
+            is_anonymous=self._is_anonymous,
+            max_votes=self._max_votes,
         )
 
         await interaction.response.defer(ephemeral=True)
@@ -689,12 +730,16 @@ class PollTemplateCog(commands.Cog):
     @app_commands.describe(
         id="ID of the template to use",
         channel="Channel to post the poll in (defaults to current channel)",
+        anonymous="Override the template's anonymous setting (omit to use template default)",
+        max_votes="Override the template's max votes setting (omit to use template default)",
     )
     async def template_use(
         self,
         interaction: discord.Interaction,
         id: int,
         channel: Optional[discord.TextChannel] = None,
+        anonymous: Optional[bool] = None,
+        max_votes: Optional[int] = None,
     ) -> None:
         await self._staff_check(interaction)
 
@@ -702,6 +747,12 @@ class PollTemplateCog(commands.Cog):
         if template is None or template.is_deleted:
             await interaction.response.send_message(
                 f"No active template found with ID `{id}`.", ephemeral=True
+            )
+            return
+
+        if max_votes is not None and max_votes < 0:
+            await interaction.response.send_message(
+                "`max_votes` must be 0 (unlimited) or a positive number.", ephemeral=True
             )
             return
 
@@ -720,6 +771,8 @@ class PollTemplateCog(commands.Cog):
             prefill_name=template.name,
             prefill_description=template.description,
             prefill_options=[o.label for o in template_options],
+            is_anonymous=anonymous if anonymous is not None else template.is_anonymous,
+            max_votes=max_votes if max_votes is not None else template.max_votes,
         )
         await interaction.response.send_modal(modal)
 
