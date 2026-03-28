@@ -49,13 +49,13 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
         "Browse read-only punishment records imported from the legacy Auttaja bot.",
         [
             (
-                "/auttaja offender <user>",
-                "Show all historical Auttaja punishments received by a user. Accepts a mention or a raw user ID.",
+                "/auttaja offender <user> [show_removed]",
+                "Show all historical Auttaja punishments received by a user. Accepts a mention or a raw user ID. Set `show_removed: True` to include removed/deleted punishments (hidden by default).",
                 "/auttaja offender @JohnDoe",
             ),
             (
-                "/auttaja punisher <user>",
-                "Show all historical Auttaja punishments issued by a staff member. Accepts a mention or a raw user ID.",
+                "/auttaja punisher <user> [show_removed]",
+                "Show all historical Auttaja punishments issued by a staff member. Accepts a mention or a raw user ID. Set `show_removed: True` to include removed/deleted punishments (hidden by default).",
                 "/auttaja punisher 242730576195354624",
             ),
             (

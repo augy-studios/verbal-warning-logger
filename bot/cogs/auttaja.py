@@ -266,11 +266,15 @@ class AuttajaCog(commands.Cog):
         name="offender",
         description="Show all Auttaja punishments received by a user",
     )
-    @app_commands.describe(user="User mention or user ID")
+    @app_commands.describe(
+        user="User mention or user ID",
+        show_removed="Include removed/deleted punishments in the results (default: False)",
+    )
     async def auttaja_offender(
         self,
         interaction: discord.Interaction,
         user: str,
+        show_removed: bool = False,
     ) -> None:
         await self._staff_check(interaction)
 
@@ -283,18 +287,20 @@ class AuttajaCog(commands.Cog):
 
         await interaction.response.defer(ephemeral=False)
 
-        punishments = await self.auttaja_db.search_by_offender(user_id)
+        all_punishments = await self.auttaja_db.search_by_offender(user_id)
+        punishments = all_punishments if show_removed else [p for p in all_punishments if not p.deleted]
         breakdown = await self.auttaja_db.action_breakdown(user_id, "offender")
 
         if not punishments:
-            await interaction.followup.send(
-                f"No Auttaja punishments found for {_mention(user_id)} (`{user_id}`).",
-                ephemeral=True,
-            )
+            msg = f"No Auttaja punishments found for {_mention(user_id)} (`{user_id}`)."
+            if not show_removed and any(p.deleted for p in all_punishments):
+                msg += " (There are removed punishments — use `show_removed: True` to include them.)"
+            await interaction.followup.send(msg, ephemeral=True)
             return
 
         total = len(punishments)
         page_count = (total - 1) // 5 + 1
+        removed_note = " *(including removed)*" if show_removed else ""
         pages: list[discord.Embed] = []
 
         for page_index, chunk in enumerate(_chunk(punishments, 5), start=1):
@@ -303,7 +309,7 @@ class AuttajaCog(commands.Cog):
                 color=self.embed_color,
                 description=(
                     f"**User:** {_mention(user_id)} (`{user_id}`)\n"
-                    f"**Total punishments:** `{total}`\n"
+                    f"**Total punishments:** `{total}`{removed_note}\n"
                     f"**Breakdown:** {_build_action_summary(breakdown)}\n"
                     f"**Page:** `{page_index}/{page_count}`"
                 ),
@@ -322,11 +328,15 @@ class AuttajaCog(commands.Cog):
         name="punisher",
         description="Show all Auttaja punishments issued by a staff member",
     )
-    @app_commands.describe(user="User mention or user ID")
+    @app_commands.describe(
+        user="User mention or user ID",
+        show_removed="Include removed/deleted punishments in the results (default: False)",
+    )
     async def auttaja_punisher(
         self,
         interaction: discord.Interaction,
         user: str,
+        show_removed: bool = False,
     ) -> None:
         await self._staff_check(interaction)
 
@@ -339,18 +349,20 @@ class AuttajaCog(commands.Cog):
 
         await interaction.response.defer(ephemeral=False)
 
-        punishments = await self.auttaja_db.search_by_punisher(user_id)
+        all_punishments = await self.auttaja_db.search_by_punisher(user_id)
+        punishments = all_punishments if show_removed else [p for p in all_punishments if not p.deleted]
         breakdown = await self.auttaja_db.action_breakdown(user_id, "punisher")
 
         if not punishments:
-            await interaction.followup.send(
-                f"No Auttaja punishments issued by {_mention(user_id)} (`{user_id}`).",
-                ephemeral=True,
-            )
+            msg = f"No Auttaja punishments issued by {_mention(user_id)} (`{user_id}`)."
+            if not show_removed and any(p.deleted for p in all_punishments):
+                msg += " (There are removed punishments — use `show_removed: True` to include them.)"
+            await interaction.followup.send(msg, ephemeral=True)
             return
 
         total = len(punishments)
         page_count = (total - 1) // 5 + 1
+        removed_note = " *(including removed)*" if show_removed else ""
         pages: list[discord.Embed] = []
 
         for page_index, chunk in enumerate(_chunk(punishments, 5), start=1):
@@ -359,7 +371,7 @@ class AuttajaCog(commands.Cog):
                 color=self.embed_color,
                 description=(
                     f"**Punisher:** {_mention(user_id)} (`{user_id}`)\n"
-                    f"**Total punishments issued:** `{total}`\n"
+                    f"**Total punishments issued:** `{total}`{removed_note}\n"
                     f"**Breakdown:** {_build_action_summary(breakdown)}\n"
                     f"**Page:** `{page_index}/{page_count}`"
                 ),
