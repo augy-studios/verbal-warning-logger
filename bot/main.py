@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 import discord
 from discord.ext import commands
@@ -35,7 +36,11 @@ class VerbalWarningsBot(commands.Bot):
         self.log_channel_id = settings.log_channel_id
         self.staff_role_id = settings.staff_role_id
 
-        # Shared DB
+        # Supabase credentials (used by the Auttaja cog)
+        self.supabase_url: str = os.environ["SUPABASE_URL"]
+        self.supabase_key: str = os.environ["SUPABASE_KEY"]
+
+        # Shared DB (SQLite, for verbal warnings)
         self.db = Database(path="warnings.db")
 
     async def setup_hook(self) -> None:
@@ -49,6 +54,7 @@ class VerbalWarningsBot(commands.Bot):
         await self.load_extension("bot.cogs.utility")
         await self.load_extension("bot.cogs.polls")
         await self.load_extension("bot.cogs.polls_template")
+        await self.load_extension("bot.cogs.auttaja")
 
         # Sync commands globally (can take time) — you can switch to guild sync during dev.
         await self.tree.sync()

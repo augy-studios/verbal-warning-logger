@@ -45,6 +45,26 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
             ),
         ],
     ),
+    "Auttaja History": (
+        "Browse read-only punishment records imported from the legacy Auttaja bot.",
+        [
+            (
+                "/auttaja offender <user>",
+                "Show all historical Auttaja punishments received by a user. Accepts a mention or a raw user ID.",
+                "/auttaja offender @JohnDoe",
+            ),
+            (
+                "/auttaja punisher <user>",
+                "Show all historical Auttaja punishments issued by a staff member. Accepts a mention or a raw user ID.",
+                "/auttaja punisher 242730576195354624",
+            ),
+            (
+                "/auttaja lb <mode>",
+                "Show a leaderboard from the Auttaja records. `offender` = most punished users, `punisher` = most active punishers.",
+                "/auttaja lb offender",
+            ),
+        ],
+    ),
     "Utility": (
         "General utility commands for server management.",
         [
@@ -159,6 +179,7 @@ _COG_DATA: dict[str, tuple[str, list[tuple[str, str, str]]]] = {
 
 _COG_EMOJIS: dict[str, str] = {
     "Verbal Warnings": "⚠️",
+    "Auttaja History": "📜",
     "Utility": "🔧",
     "Polls": "📊",
     "Poll Templates": "📋",
