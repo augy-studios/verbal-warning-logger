@@ -152,6 +152,38 @@ class AuttajaDB:
         counts: Counter[str] = Counter(row["punisher"] for row in (response.data or []))
         return counts.most_common()
 
+    async def get_punishment(self, punishment_id: str) -> AuttajaPunishment | None:
+        response = (
+            await self.client.table(self.TABLE)
+            .select("*")
+            .eq("id", punishment_id)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        return AuttajaPunishment(rows[0]) if rows else None
+
+    async def update_punishment(
+        self,
+        punishment_id: str,
+        offender: str,
+        punisher: str,
+        reason: str,
+        action: str,
+    ) -> int:
+        response = (
+            await self.client.table(self.TABLE)
+            .update({
+                "offender": offender,
+                "punisher": punisher,
+                "reason": reason,
+                "action": action,
+            })
+            .eq("id", punishment_id)
+            .execute()
+        )
+        return len(response.data or [])
+
     async def action_breakdown(self, user_id: str, role: Literal["offender", "punisher"]) -> dict[str, int]:
         """Returns {action: count} for a given user in a given role."""
         response = (
@@ -198,7 +230,7 @@ def _parse_user_arg(raw: str) -> str | None:
 
 def _build_punishment_field(p: AuttajaPunishment, show_offender: bool = False) -> tuple[str, str]:
     emoji = _action_emoji(p.action)
-    name = f"{emoji} `{p.action.upper()}` • {p.ts_str}"
+    name = f"{emoji} `{p.action.upper()}` • ID `{p.id}` • {p.ts_str}"
     lines = []
     if show_offender:
         lines.append(f"**Offender:** {_mention(p.offender)} (`{p.offender}`)")
@@ -223,6 +255,105 @@ def _build_action_summary(breakdown: dict[str, int]) -> str:
     )
 
 
+# ===== EDIT MODAL =====
+
+
+class EditAuttajaModal(discord.ui.Modal, title="Edit Auttaja punishment"):
+    def __init__(
+        self,
+        auttaja_db: AuttajaDB,
+        punishment: AuttajaPunishment,
+        embed_color: int,
+        log_channel_id: int,
+    ) -> None:
+        super().__init__(timeout=300)
+        self.auttaja_db = auttaja_db
+        self.punishment = punishment
+        self.embed_color = embed_color
+        self.log_channel_id = log_channel_id
+
+        self.offender_id = discord.ui.TextInput(
+            label="Offender ID",
+            placeholder="e.g. 123456789012345678",
+            default=str(punishment.offender),
+            max_length=25,
+        )
+        self.punisher_id = discord.ui.TextInput(
+            label="Punisher ID",
+            placeholder="e.g. 123456789012345678",
+            default=str(punishment.punisher),
+            max_length=25,
+        )
+        self.action = discord.ui.TextInput(
+            label="Action",
+            placeholder="ban, mute, kick, warn, softban, tempban",
+            default=punishment.action,
+            max_length=20,
+        )
+        self.reason = discord.ui.TextInput(
+            label="Reason",
+            style=discord.TextStyle.paragraph,
+            default=punishment.reason,
+            max_length=1000,
+        )
+
+        self.add_item(self.offender_id)
+        self.add_item(self.punisher_id)
+        self.add_item(self.action)
+        self.add_item(self.reason)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        offender = self.offender_id.value.strip()
+        punisher = self.punisher_id.value.strip()
+        action = self.action.value.strip().lower()
+        reason = self.reason.value.strip()
+
+        if not offender.isdigit() or not punisher.isdigit():
+            await interaction.response.send_message(
+                "Offender ID and Punisher ID must be numbers.", ephemeral=True
+            )
+            return
+
+        if not action:
+            await interaction.response.send_message("Action cannot be empty.", ephemeral=True)
+            return
+
+        if not reason:
+            await interaction.response.send_message("Reason cannot be empty.", ephemeral=True)
+            return
+
+        changed = await self.auttaja_db.update_punishment(
+            punishment_id=self.punishment.id,
+            offender=offender,
+            punisher=punisher,
+            reason=reason,
+            action=action,
+        )
+
+        if changed <= 0:
+            await interaction.response.send_message("Nothing was updated (ID not found).", ephemeral=True)
+            return
+
+        embed = discord.Embed(
+            title="Auttaja punishment updated",
+            color=self.embed_color,
+            description=(
+                f"**ID:** `{self.punishment.id}`\n"
+                f"**Offender:** {_mention(offender)} (`{offender}`)\n"
+                f"**Punisher:** {_mention(punisher)} (`{punisher}`)\n"
+                f"**Action:** `{action.upper()}`\n"
+                f"**Reason:** {reason}"
+            ),
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        if interaction.client and isinstance(interaction.client, commands.Bot):
+            channel = interaction.client.get_channel(self.log_channel_id)
+            if isinstance(channel, discord.TextChannel):
+                await channel.send(embed=embed)
+
+
 # ===== COG =====
 
 
@@ -232,11 +363,13 @@ class AuttajaCog(commands.Cog):
         bot: commands.Bot,
         auttaja_db: AuttajaDB,
         embed_color: int,
+        log_channel_id: int,
         staff_role_id: int,
     ) -> None:
         self.bot = bot
         self.auttaja_db = auttaja_db
         self.embed_color = embed_color
+        self.log_channel_id = log_channel_id
         self.staff_role_id = staff_role_id
 
     auttaja = app_commands.Group(name="auttaja", description="Browse historical Auttaja bot punishments")
@@ -440,6 +573,26 @@ class AuttajaCog(commands.Cog):
         view = PagedEmbedsView(pages, author_id=interaction.user.id)
         await interaction.followup.send(embed=pages[0], view=view)
 
+    # ---- /auttaja edit ----
+
+    @auttaja.command(name="edit", description="Edit an Auttaja punishment by its ID")
+    @app_commands.describe(id="The punishment ID to edit")
+    async def auttaja_edit(self, interaction: discord.Interaction, id: str) -> None:
+        await self._staff_check(interaction)
+
+        punishment = await self.auttaja_db.get_punishment(id)
+        if punishment is None:
+            await interaction.response.send_message(f"No punishment found with ID `{id}`.", ephemeral=True)
+            return
+
+        modal = EditAuttajaModal(
+            auttaja_db=self.auttaja_db,
+            punishment=punishment,
+            embed_color=self.embed_color,
+            log_channel_id=self.log_channel_id,
+        )
+        await interaction.response.send_modal(modal)
+
 
 # ===== SETUP =====
 
@@ -464,6 +617,7 @@ async def setup(bot: commands.Bot) -> None:
             bot=bot,
             auttaja_db=auttaja_db,
             embed_color=bot.embed_color,  # type: ignore[attr-defined]
+            log_channel_id=bot.log_channel_id,  # type: ignore[attr-defined]
             staff_role_id=bot.staff_role_id,  # type: ignore[attr-defined]
         )
     )
