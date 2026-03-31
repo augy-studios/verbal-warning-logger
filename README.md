@@ -1,229 +1,48 @@
 # Verbal Warning Logger
 
-A modern **Discord.py slash‑command moderation bot** for tracking and managing **verbal warnings** with a clean UI, pagination, and SQLite database storage.
+A Discord moderation bot for logging and managing verbal warnings. Built with discord.py and slash commands, with SQLite storage and no external database required.
 
----
+## Features
 
-## ✨ Features
+- Log verbal warnings with a reason and evidence link
+- Search, paginate, and filter the full warning history
+- Edit or delete warnings through Discord modals
+- View leaderboards for most-warned users and most-active moderators
+- Staff evaluation polls with anonymous voting and reusable templates
+- Historical punishment lookup via Auttaja/Supabase integration
+- Role hierarchy permission system — no manual per-user grants needed
+- All actions logged to a configured channel
 
-### Moderation (Staff‑only)
+## Quick Start
 
-* `/verbal add` — Add a verbal warning with evidence link
-* `/verbal list` — View all warnings (paginated)
-* `/verbal search <user>` — View warnings for a specific user
-* `/verbal delete <id>` — Delete a warning by ID
-* `/verbal edit <id>` — Edit a warning using a modal UI
-* `/verbal lb <offender|mod>` — Leaderboard (most warned users / most active moderators)
-
-### Utility
-
-* `/ping` — Bot latency
-* `/about` — Bot info
-* `/retrieveids channels` — Get channel IDs in a category
-* `/retrieveids users` — Get user IDs from a role
-* `/retrieveids leaderboard` — Get user IDs from DB (mods/offenders)
-
-### Core System
-
-* SQLite database (no external DB required)
-* Slash‑command based (modern Discord UI)
-* Paginated embeds with buttons
-* Staff‑role hierarchy permission system
-* Automatic logging to a log channel
-* Modal UI for editing warnings
-
----
-
-## 🗄 Database
-
-SQLite file: `warnings.db`
-
-Table: `verbal_warnings`
-
-| Column       | Type    | Description                  |
-| ------------ | ------- | ---------------------------- |
-| id           | INTEGER | Primary key                  |
-| createdAt    | TEXT    | Timestamp                    |
-| userId       | INTEGER | Warned user                  |
-| reason       | TEXT    | Warning reason               |
-| evidenceLink | TEXT    | Discord message link         |
-| modId        | INTEGER | Moderator who issued warning |
-
-The database is automatically created on first run.
-
----
-
-## 🔐 Permissions
-
-All `/verbal` commands require:
-
-* Server Administrator **OR**
-* Staff role (`STAFF_ROLE_ID`) **OR**
-* Any role higher than the staff role
-
-Utility commands have their own permission requirements where applicable.
-
----
-
-## 📦 Requirements
-
-* Python **3.10+** (3.11/3.12 recommended)
-* Linux / Windows / macOS
-* Discord bot token
-
-Python packages:
-
-* discord.py
-* aiosqlite
-* python-dotenv
-
-(Installed automatically via `requirements.txt`)
-
----
-
-## ⚙️ Installation
-
-### 1. Create Discord Bot
-
-1. Go to Discord Developer Portal
-2. Create Application → Add Bot
-3. Copy Bot Token
-4. Invite bot with scopes:
-
-   * `bot`
-   * `applications.commands`
-
-**No privileged intents required**
-
----
-
-### 2. Install Bot
+**Requirements:** Python 3.10+
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/augy-studios/verbal-warning-logger.git
 cd verbal-warning-logger
-
-python3 -m venv .venv
-source .venv/bin/activate   # Linux/macOS
-# .venv\Scripts\activate   # Windows
-
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-```
-
----
-
-### 3. Configure Environment
-
-Create `.env` file:
-
-```env
-DISCORD_TOKEN=YOUR_BOT_TOKEN
-LOG_CHANNEL_ID=123456789012345678
-STAFF_ROLE_ID=123456789012345678
-EMBED_COLOR=0x007FFF
-```
-
-**Descriptions**
-
-* `DISCORD_TOKEN` — Bot token from Discord
-* `LOG_CHANNEL_ID` — Channel where all warning actions are logged
-* `STAFF_ROLE_ID` — Minimum role required to use `/verbal` commands
-* `EMBED_COLOR` — Embed color in HEX
-
----
-
-### 4. Run Bot
-
-```bash
+cp .env.example .env   # fill in your values
 python -m bot.main
 ```
 
-On first run the bot will:
+**.env variables:**
 
-* Create `warnings.db`
-* Create database tables
-* Sync slash commands
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DISCORD_TOKEN` | Yes | Bot token from the Discord Developer Portal |
+| `LOG_CHANNEL_ID` | Yes | Channel ID where warning actions are logged |
+| `STAFF_ROLE_ID` | Yes | Minimum role required to use `/verbal` commands |
+| `EMBED_COLOR` | No | Embed accent color in hex (default: `0x007FFF`) |
+| `SUPABASE_URL` | No | Supabase project URL (Auttaja integration only) |
+| `SUPABASE_KEY` | No | Supabase service role key (Auttaja integration only) |
 
----
+On first run, the bot creates `warnings.db` and `staffpolls.db` and syncs slash commands globally (can take up to 1 hour to propagate).
 
-## 🧪 Development Tips
+## Documentation
 
-### Faster Command Sync (Guild‑only)
+Full docs are in the [`docs/`](docs/) folder and cover every command group, the permission system, and a step-by-step self-hosting guide.
 
-Global sync can take several minutes. For faster development, edit `bot/main.py`:
+## License
 
-Replace:
-
-```python
-await self.tree.sync()
-```
-
-With:
-
-```python
-await self.tree.sync(guild=discord.Object(id=YOUR_GUILD_ID))
-```
-
----
-
-## 📁 Project Structure
-
-```
-bot/
- ├── main.py
- ├── config.py
- ├── db.py
- ├── checks.py
- ├── utility.py
- ├── verbal.py
- ├── ui.py
- └── ...
-
-warnings.db
-README.md
-requirements.txt
-.env
-```
-
----
-
-## 🧩 How It Works
-
-* Slash commands handled via **discord.app_commands**
-* Database powered by **aiosqlite (async SQLite)**
-* Pagination UI built using **discord.ui.View**
-* Permission system based on role hierarchy
-* Logging automatically sent to configured channel
-
----
-
-## 🛠 Troubleshooting
-
-### Commands not appearing
-
-* Wait for global sync (can take up to 1 hour)
-* Or use guild‑only sync during development
-
-### "Database not connected"
-
-* Ensure bot started successfully
-* Check console for errors
-
-### Permission denied
-
-* Verify `STAFF_ROLE_ID`
-* Ensure role hierarchy is correct
-
----
-
-## 📜 License
-
-[MIT License](./LICENSE)
-
----
-
-## 👤 Author
-
-Created by **Augy**
-
-Contact: [augy@augystudios.com](mailto:augy@augystudios.com)
+MIT — © 2026 Augy Studios
