@@ -171,7 +171,11 @@ async function renderLeaderboard(container) {
     try {
       const data = await api.leaderboard(_lbMode);
       if (!data.length) { el.innerHTML = '<p class="text-muted">No data.</p>'; return; }
-      const medals = ["🥇","🥈","🥉"];
+      const medals = [
+        `<img class="medal-svg" src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/svg/1f947.svg" alt="🥇" />`,
+        `<img class="medal-svg" src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/svg/1f948.svg" alt="🥈" />`,
+        `<img class="medal-svg" src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/svg/1f949.svg" alt="🥉" />`,
+      ];
       const medalClass = ["gold","silver","bronze"];
       el.innerHTML = `<div class="lb-list">${data.map((row,i) => `
         <div class="lb-row">
