@@ -92,8 +92,7 @@ html { font-size: 15px; scroll-behavior: smooth; }
 
 body {
   font-family: 'Jua', sans-serif;
-  background: linear-gradient(135deg, var(--bg-a) 0%, var(--bg-b) 50%, var(--bg-c) 100%);
-  background-attachment: fixed;
+  background: var(--bg-b);
   min-height: 100vh;
   color: #1e2a1e;
   overflow-x: hidden;
