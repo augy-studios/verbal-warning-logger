@@ -1,5 +1,6 @@
 import { auttaja as api } from "../api.js";
 import { toast, openModal, closeModal } from "../app.js";
+import { userIdHtml, setupCopyBtns, resolveUserNames } from "../id-display.js";
 
 let _tab = "search";
 let _lbMode = "offender";
@@ -98,8 +99,8 @@ function renderPunishments(container, punishments, uid) {
             <tr data-id="${p.id}">
               <td class="cell-id">${p.id}</td>
               <td><span class="badge ${actionBadge(p.action)}">${escHtml(p.action||"?")}</span></td>
-              <td class="cell-mono">${escHtml(String(p.offender||""))}</td>
-              <td class="cell-mono">${escHtml(String(p.punisher||""))}</td>
+              <td>${userIdHtml(p.offender||"")}</td>
+              <td>${userIdHtml(p.punisher||"")}</td>
               <td style="max-width:200px"><span title="${escHtml(p.reason||"")}">${escHtml(truncate(p.reason||"—",50))}</span></td>
               <td class="text-muted" style="white-space:nowrap;font-size:.8rem">${fmtDate(p.timestamp)}</td>
               <td><button class="btn btn-secondary btn-sm edit-auttaja-btn" data-id="${p.id}">Edit</button></td>
@@ -111,6 +112,8 @@ function renderPunishments(container, punishments, uid) {
   container.querySelectorAll(".edit-auttaja-btn").forEach((btn) => {
     btn.addEventListener("click", () => openEditModal(btn.dataset.id));
   });
+  setupCopyBtns(container);
+  resolveUserNames(container);
 }
 
 async function openEditModal(id) {
@@ -180,10 +183,12 @@ async function renderLeaderboard(container) {
       el.innerHTML = `<div class="lb-list">${data.map((row,i) => `
         <div class="lb-row">
           <div class="lb-rank ${medalClass[i]||""}">${medals[i]||`#${i+1}`}</div>
-          <div class="lb-user"><div class="lb-user-id">${escHtml(String(row.user_id))}</div></div>
+          <div class="lb-user">${userIdHtml(row.user_id)}</div>
           <div class="lb-count">${row.count}</div>
         </div>`).join("")}
       </div>`;
+      setupCopyBtns(el);
+      resolveUserNames(el);
     } catch (e) {
       el.innerHTML = `<div class="notice notice-warn">${e.message}</div>`;
     }

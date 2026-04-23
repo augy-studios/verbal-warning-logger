@@ -513,6 +513,21 @@ textarea { resize: vertical; min-height: 80px; }
 }
 .user-chip img { width: 1.1rem; height: 1.1rem; border-radius: 50%; }
 
+/* ── ID Cells with Copy Button ──────────────────────────────────────────── */
+.id-with-name {
+  display: inline-flex; align-items: center; gap: .2rem; flex-wrap: nowrap;
+}
+.copy-id-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.35rem; height: 1.35rem; border: none; border-radius: 5px;
+  background: transparent; cursor: pointer; color: #aaa; flex-shrink: 0;
+  padding: 0; transition: background .13s, color .13s;
+}
+.copy-id-btn:hover { background: rgba(0,0,0,0.07); color: #444; }
+.copy-id-btn--done { color: #16a34a !important; }
+.copy-id-btn svg { width: .82rem; height: .82rem; display: block; }
+.id-name { font-size: .76rem; color: #999; white-space: nowrap; }
+
 /* ── Misc ───────────────────────────────────────────────────────────────── */
 .section-title {
   font-family: 'Jua', sans-serif; font-size: 1rem; color: var(--brand-text);

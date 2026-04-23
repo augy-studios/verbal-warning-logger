@@ -1,5 +1,6 @@
 import { utility as api } from "../api.js";
 import { toast } from "../app.js";
+import { idWithNameHtml, userIdHtml, setupCopyBtns, resolveUserNames } from "../id-display.js";
 
 let _tab = "members";
 
@@ -81,12 +82,13 @@ async function renderMembers(container) {
                 <span>${escHtml(m.username)}</span>
               </div>
             </td>
-            <td class="cell-mono" style="user-select:all">${escHtml(m.id||"")}</td>
+            <td>${idWithNameHtml(m.id, null)}</td>
             <td><span class="text-muted" style="font-size:.78rem">${m.roles.length} role(s)</span></td>
           </tr>`).join("")}
         </tbody>
       </table></div>
       <p class="text-muted" style="margin-top:.5rem">${members.length} member(s) found</p>`;
+      setupCopyBtns(results);
     } catch (e) {
       results.innerHTML = `<p class="text-muted">Error: ${e.message}</p>`;
     }
@@ -115,18 +117,20 @@ async function renderChannels(container) {
       const params = catId ? { category_id: catId } : {};
       const channels = await api.channels(params);
       const types = { 0:"Text", 2:"Voice", 4:"Category", 5:"Announcement", 13:"Stage", 15:"Forum" };
+      const channelNames = Object.fromEntries(channels.map((c) => [c.id, c.name]));
       results.innerHTML = `<div class="table-wrap"><table>
         <thead><tr><th>Name</th><th>Type</th><th>ID</th><th>Parent</th></tr></thead>
         <tbody>${channels.map((c) => `
           <tr>
             <td>${escHtml(c.name)}</td>
             <td><span class="badge badge-gray" style="font-size:.72rem">${types[c.type]||c.type}</span></td>
-            <td class="cell-mono" style="user-select:all">${c.id}</td>
-            <td class="cell-mono">${c.parent_id||"—"}</td>
+            <td>${idWithNameHtml(c.id, null)}</td>
+            <td>${c.parent_id ? idWithNameHtml(c.parent_id, channelNames[c.parent_id]) : "—"}</td>
           </tr>`).join("")}
         </tbody>
       </table></div>
       <p class="text-muted" style="margin-top:.5rem">${channels.length} channel(s)</p>`;
+      setupCopyBtns(results);
     } catch (e) {
       results.innerHTML = `<p class="text-muted">Error: ${e.message}</p>`;
     }
@@ -147,13 +151,14 @@ async function renderRoles(container) {
             <span style="width:.75rem;height:.75rem;border-radius:50%;background:${r.color?"#"+r.color.toString(16).padStart(6,"0"):"#ccc"};flex-shrink:0"></span>
             ${escHtml(r.name)}
           </td>
-          <td class="cell-mono" style="user-select:all">${r.id}</td>
+          <td>${idWithNameHtml(r.id, null)}</td>
           <td class="cell-mono">${r.color?"#"+r.color.toString(16).padStart(6,"0"):"—"}</td>
           <td>${r.position}</td>
         </tr>`).join("")}
       </tbody>
     </table></div>`;
     container.querySelector(".card").innerHTML = `<div class="card-title">Guild Roles</div>${rolesHtml}<p class="text-muted" style="margin-top:.5rem">${roles.length} role(s)</p>`;
+    setupCopyBtns(container.querySelector(".card"));
   } catch (e) {
     container.querySelector(".card").innerHTML = `<div class="card-title">Guild Roles</div><p class="text-muted">Error: ${e.message}</p>`;
   }
@@ -184,15 +189,17 @@ async function renderIds(container) {
       const data = await api.warningIds(mode);
       _currentIds = data.map((r) => r.user_id);
       results.innerHTML = `<div class="table-wrap"><table>
-        <thead><tr><th>User ID</th><th>Count</th></tr></thead>
+        <thead><tr><th>User</th><th>Count</th></tr></thead>
         <tbody>${data.map((r) => `
           <tr>
-            <td class="cell-mono" style="user-select:all">${r.user_id}</td>
+            <td>${userIdHtml(r.user_id)}</td>
             <td>${r.count}</td>
           </tr>`).join("")}
         </tbody>
       </table></div>
       <p class="text-muted" style="margin-top:.5rem">${data.length} unique user(s)</p>`;
+      setupCopyBtns(results);
+      resolveUserNames(results);
     } catch (e) {
       results.innerHTML = `<p class="text-muted">Error: ${e.message}</p>`;
     }

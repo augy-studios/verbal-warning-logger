@@ -1,8 +1,8 @@
-import { warnings as api, utility } from "../api.js";
+import { warnings as api } from "../api.js";
 import { toast, openModal, closeModal, confirmModal } from "../app.js";
+import { userIdHtml, setupCopyBtns, resolveUserNames } from "../id-display.js";
 
 let _state = { page: 1, per_page: 20, user_id: "", tab: "list", lb_mode: "offender" };
-let _userCache = {};
 
 export function render() {
   return `
@@ -89,8 +89,8 @@ function rowHtml(w) {
   return `<tr data-id="${w.id}">
     <td class="cell-id">${w.id}</td>
     <td class="text-muted" style="white-space:nowrap;font-size:.8rem">${fmtDate(w.createdAt)}</td>
-    <td><span class="cell-mono user-lookup" data-uid="${w.userId}">${w.userId}</span></td>
-    <td><span class="cell-mono user-lookup" data-uid="${w.modId}">${w.modId}</span></td>
+    <td>${userIdHtml(w.userId)}</td>
+    <td>${userIdHtml(w.modId)}</td>
     <td style="max-width:220px"><span title="${escHtml(w.reason)}">${escHtml(truncate(w.reason, 50))}</span></td>
     <td><a class="link external" href="${escHtml(w.evidenceLink)}" target="_blank" rel="noopener">Link</a></td>
     <td class="td-actions">
@@ -107,20 +107,8 @@ function bindRowActions(container, refresh) {
   container.querySelectorAll(".del-btn").forEach((btn) => {
     btn.addEventListener("click", () => deleteWarning(btn.dataset.id, refresh));
   });
-  // Lazy user lookups
-  container.querySelectorAll(".user-lookup").forEach((el) => {
-    el.style.cursor = "pointer";
-    el.title = "Click to look up username";
-    el.addEventListener("click", async () => {
-      const uid = el.dataset.uid;
-      if (_userCache[uid]) { el.textContent = _userCache[uid]; return; }
-      try {
-        const u = await utility.user(uid);
-        _userCache[uid] = u.username;
-        el.textContent = u.username;
-      } catch { el.textContent = uid; }
-    });
-  });
+  setupCopyBtns(container);
+  resolveUserNames(container);
 }
 
 async function renderSearch(container) {
@@ -152,11 +140,13 @@ async function renderSearch(container) {
               <td class="text-muted" style="white-space:nowrap;font-size:.8rem">${fmtDate(w.createdAt)}</td>
               <td style="max-width:300px">${escHtml(w.reason)}</td>
               <td><a class="link external" href="${escHtml(w.evidenceLink)}" target="_blank" rel="noopener">Link</a></td>
-              <td class="cell-mono">${w.modId}</td>
+              <td>${userIdHtml(w.modId)}</td>
             </tr>`).join("")}
           </tbody>
         </table></div>
         <p class="text-muted" style="margin-top:.5rem">${data.total} warning(s) total</p>`;
+        setupCopyBtns(results);
+        resolveUserNames(results);
       }
     } catch (e) {
       results.innerHTML = `<p class="text-muted">Error: ${e.message}</p>`;
@@ -203,23 +193,12 @@ async function renderLeaderboard(container) {
       el.innerHTML = `<div class="lb-list">${data.map((row, i) => `
         <div class="lb-row">
           <div class="lb-rank ${medalClass[i] || ""}">${medals[i] || `#${i+1}`}</div>
-          <div class="lb-user">
-            <div class="lb-user-id" id="lb-uid-${i}" data-uid="${row.user_id}">${row.user_id}</div>
-          </div>
+          <div class="lb-user">${userIdHtml(row.user_id)}</div>
           <div class="lb-count">${row.count}</div>
         </div>`).join("")}
       </div>`;
-
-      // Async user lookups
-      el.querySelectorAll("[data-uid]").forEach(async (el2) => {
-        const uid = el2.dataset.uid;
-        if (_userCache[uid]) { el2.textContent = _userCache[uid]; return; }
-        try {
-          const u = await utility.user(uid);
-          _userCache[uid] = u.username;
-          el2.textContent = u.username;
-        } catch {}
-      });
+      setupCopyBtns(el);
+      resolveUserNames(el);
     } catch (e) {
       el.innerHTML = `<p class="text-muted">Error: ${e.message}</p>`;
     }

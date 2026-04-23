@@ -1,4 +1,5 @@
 import { warnings as warnApi, polls as pollsApi, utility as utilApi } from "../api.js";
+import { copyBtnHtml, userIdHtml, setupCopyBtns, resolveUserNames } from "../id-display.js";
 
 export function render() {
   return `
@@ -60,12 +61,12 @@ export async function init() {
       rwCard.innerHTML = `<div class="card-title">Recent Warnings</div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>#</th><th>User ID</th><th>Reason</th><th>Date</th></tr></thead>
+            <thead><tr><th>#</th><th>User</th><th>Reason</th><th>Date</th></tr></thead>
             <tbody>
               ${items.map((w) => `
                 <tr>
                   <td class="cell-id">${w.id}</td>
-                  <td class="cell-mono">${w.userId}</td>
+                  <td>${userIdHtml(w.userId)}</td>
                   <td>${escHtml(truncate(w.reason, 40))}</td>
                   <td class="text-muted" style="white-space:nowrap">${fmtDate(w.createdAt)}</td>
                 </tr>`).join("")}
@@ -73,6 +74,8 @@ export async function init() {
           </table>
         </div>
         <div style="margin-top:.75rem"><a class="btn btn-ghost btn-sm" href="#/warnings">View all →</a></div>`;
+      setupCopyBtns(rwCard);
+      resolveUserNames(rwCard);
     }
   } catch {
     rwCard.innerHTML = `<div class="card-title">Recent Warnings</div><p class="text-muted">Could not load warnings.</p>`;
@@ -89,13 +92,14 @@ export async function init() {
         ${iconUrl ? `<img src="${iconUrl}" style="width:3rem;height:3rem;border-radius:50%"/>` : ""}
         <div>
           <div style="font-weight:600;color:var(--brand-text)">${escHtml(gi.name)}</div>
-          <div class="text-muted">ID: ${gi.id}</div>
+          <div class="text-muted" style="display:flex;align-items:center;gap:.2rem">ID: <span class="cell-mono">${gi.id}</span>${copyBtnHtml(gi.id)}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;font-size:.85rem">
         <div class="text-muted">Members</div><div>${gi.member_count?.toLocaleString() ?? "—"}</div>
         <div class="text-muted">Online</div><div>${gi.online_count?.toLocaleString() ?? "—"}</div>
       </div>`;
+    setupCopyBtns(gCard);
   } else {
     gCard.innerHTML = `<div class="card-title">Server Info</div><p class="text-muted">Could not load guild info.</p>`;
   }
