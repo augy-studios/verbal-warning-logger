@@ -91,7 +91,7 @@
 html { font-size: 15px; scroll-behavior: smooth; }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Jua', sans-serif;
   background: linear-gradient(135deg, var(--bg-a) 0%, var(--bg-b) 50%, var(--bg-c) 100%);
   background-attachment: fixed;
   min-height: 100vh;
@@ -453,6 +453,7 @@ textarea { resize: vertical; min-height: 80px; }
 .lb-rank.gold   { color: #d4af37; }
 .lb-rank.silver { color: #9b9b9b; }
 .lb-rank.bronze { color: #c8783a; }
+.medal-svg { width: 1.5rem; height: 1.5rem; display: block; }
 .lb-user { flex: 1; min-width: 0; }
 .lb-user-id { font-family: monospace; font-size: .8rem; color: #888; }
 .lb-username { font-size: .88rem; font-weight: 500; color: #222; }
