@@ -1,7 +1,9 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..auth import get_current_user
+from ..config import DISCORD_BOT_TOKEN, EMBED_COLOR, LOG_CHANNEL_ID
 from ..database import get_warnings_db
 
 router = APIRouter()
@@ -23,6 +25,32 @@ class WarningUpdate(BaseModel):
 
 def row_to_dict(row) -> dict:
     return dict(row)
+
+
+def _normalize_evidence_link(link: str) -> str:
+    return link.replace("https://canary.discord.com", "https://discord.com")
+
+
+async def _post_warning_to_log_channel(warning: dict) -> None:
+    if not LOG_CHANNEL_ID:
+        return
+    embed = {
+        "title": "Verbal warning added",
+        "color": EMBED_COLOR,
+        "fields": [
+            {"name": "ID", "value": f"`{warning['id']}`", "inline": True},
+            {"name": "User", "value": f"<@{warning['userId']}> (`{warning['userId']}`)", "inline": False},
+            {"name": "Mod", "value": f"<@{warning['modId']}> (`{warning['modId']}`)", "inline": False},
+            {"name": "Evidence", "value": warning["evidenceLink"], "inline": False},
+            {"name": "Reason", "value": warning["reason"], "inline": False},
+        ],
+    }
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"https://discord.com/api/v10/channels/{LOG_CHANNEL_ID}/messages",
+            headers={"Authorization": f"Bot {DISCORD_BOT_TOKEN}"},
+            json={"embeds": [embed]},
+        )
 
 
 @router.get("")
@@ -61,10 +89,12 @@ async def create_warning(
     body: WarningCreate,
     _user: dict = Depends(get_current_user),
 ):
+    evidence_link = _normalize_evidence_link(body.evidenceLink)
+
     async with get_warnings_db() as db:
         cursor = await db.execute(
             "INSERT INTO verbal_warnings (userId, reason, evidenceLink, modId) VALUES (?, ?, ?, ?)",
-            (int(body.userId), body.reason, body.evidenceLink, int(body.modId)),
+            (int(body.userId), body.reason, evidence_link, int(body.modId)),
         )
         await db.commit()
         warning_id = cursor.lastrowid
@@ -75,7 +105,9 @@ async def create_warning(
         )
         row = await cursor.fetchone()
 
-    return row_to_dict(row)
+    warning = row_to_dict(row)
+    await _post_warning_to_log_channel(warning)
+    return warning
 
 
 @router.get("/stats")

@@ -24,3 +24,8 @@ HOST: str = os.environ.get("HOST", "127.0.0.1")
 PORT: int = int(os.environ.get("PORT", "8000"))
 
 DASHBOARD_ORIGIN: str = os.environ.get("DASHBOARD_ORIGIN", "https://dash.vigila.augystudios.com")
+
+LOG_CHANNEL_ID: int = int(os.environ.get("LOG_CHANNEL_ID", "0"))
+
+_embed_color_raw: str = os.environ.get("EMBED_COLOR", "0x007FFF").strip().lower()
+EMBED_COLOR: int = int(_embed_color_raw[2:] if _embed_color_raw.startswith("0x") else _embed_color_raw, 16)
