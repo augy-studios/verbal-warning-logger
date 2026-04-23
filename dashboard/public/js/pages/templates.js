@@ -227,7 +227,7 @@ async function openUseModal(id) {
 function openFromPollModal() {
   const html = `
     <form id="from-poll-form">
-      <div class="form-group"><label>Poll ID</label><input type="number" name="poll_id" required placeholder="Poll ID…" min="1" /></div>
+      <div class="form-group"><label>Poll ID</label><input type="number" name="poll_id" class="input-id" required placeholder="Poll ID…" min="1" /></div>
       <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.75rem">
         <button type="button" class="btn btn-secondary" id="fp-cancel">Cancel</button>
         <button type="submit" class="btn btn-primary">Create Template</button>
