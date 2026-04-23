@@ -221,10 +221,10 @@ function paginationHtml(page, pages) {
 async function openAddModal(container) {
   const html = `
     <form id="warn-form">
-      <div class="form-group"><label>User ID *</label><input type="text" name="userId" placeholder="Discord User ID" required /></div>
+      <div class="form-group"><label>User ID *</label><input type="text" name="userId" class="input-id" placeholder="Discord User ID" required /></div>
       <div class="form-group"><label>Reason *</label><textarea name="reason" required placeholder="Reason for warning…"></textarea></div>
       <div class="form-group"><label>Evidence Link *</label><input type="url" name="evidenceLink" placeholder="https://discord.com/channels/…" required /></div>
-      <div class="form-group"><label>Mod ID (leave blank to use yourself)</label><input type="text" name="modId" placeholder="Discord Mod User ID" /></div>
+      <div class="form-group"><label>Mod ID (leave blank to use yourself)</label><input type="text" name="modId" class="input-id" placeholder="Discord Mod User ID" /></div>
       <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.75rem">
         <button type="button" class="btn btn-secondary" id="form-cancel">Cancel</button>
         <button type="submit" class="btn btn-primary">Add Warning</button>
@@ -258,10 +258,10 @@ async function openEditModal(id, refresh) {
 
   const html = `
     <form id="edit-form">
-      <div class="form-group"><label>User ID *</label><input type="text" name="userId" value="${escHtml(String(w.userId))}" required /></div>
+      <div class="form-group"><label>User ID *</label><input type="text" name="userId" class="input-id" value="${escHtml(String(w.userId))}" required /></div>
       <div class="form-group"><label>Reason *</label><textarea name="reason" required>${escHtml(w.reason)}</textarea></div>
       <div class="form-group"><label>Evidence Link *</label><input type="url" name="evidenceLink" value="${escHtml(w.evidenceLink)}" required /></div>
-      <div class="form-group"><label>Mod ID *</label><input type="text" name="modId" value="${escHtml(String(w.modId))}" required /></div>
+      <div class="form-group"><label>Mod ID *</label><input type="text" name="modId" class="input-id" value="${escHtml(String(w.modId))}" required /></div>
       <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.75rem">
         <button type="button" class="btn btn-secondary" id="edit-cancel">Cancel</button>
         <button type="submit" class="btn btn-primary">Save Changes</button>
