@@ -1,0 +1,17 @@
+[Unit]
+Description=Vigila Dashboard API
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/vigila/dashboard
+EnvironmentFile=/opt/vigila/dashboard/.env
+ExecStart=/opt/vigila/venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000 --workers 2
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
