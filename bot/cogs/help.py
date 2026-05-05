@@ -186,6 +186,65 @@ _COG_EMOJIS: dict[str, str] = {
 }
 
 
+# ===== HELPERS =====
+
+
+def _to_mention(syntax: str, command_ids: dict[str, int]) -> str:
+    """Convert a syntax string like '/verbal add <user> [mod]' to '</verbal add:ID> <user> [mod]'.
+
+    Falls back to a backtick-quoted string when the root command ID is unknown.
+    """
+    stripped = syntax.lstrip("/")
+    parts = stripped.split()
+    path_parts: list[str] = []
+    for part in parts:
+        if part.startswith("<") or part.startswith("["):
+            break
+        path_parts.append(part)
+
+    if not path_parts:
+        return f"`{syntax}`"
+
+    root = path_parts[0]
+    full_path = " ".join(path_parts)
+    cmd_id = command_ids.get(root)
+
+    if cmd_id is None:
+        return f"`{syntax}`"
+
+    args = stripped[len(full_path):].strip()
+    mention = f"</{full_path}:{cmd_id}>"
+    return f"{mention} {args}".strip()
+
+
+def _example_to_mention(example: str, syntax: str, command_ids: dict[str, int]) -> str:
+    """Like _to_mention but uses the known command path from *syntax* to split the example."""
+    stripped_syntax = syntax.lstrip("/")
+    path_parts: list[str] = []
+    for part in stripped_syntax.split():
+        if part.startswith("<") or part.startswith("["):
+            break
+        path_parts.append(part)
+
+    if not path_parts:
+        return f"`{example}`"
+
+    root = path_parts[0]
+    full_path = " ".join(path_parts)
+    cmd_id = command_ids.get(root)
+
+    if cmd_id is None:
+        return f"`{example}`"
+
+    mention = f"</{full_path}:{cmd_id}>"
+    example_stripped = example.lstrip("/")
+    if example_stripped.startswith(full_path):
+        remainder = example_stripped[len(full_path):].strip()
+        return f"{mention} `{remainder}`".strip() if remainder else mention
+
+    return f"`{example}`"
+
+
 # ===== EMBED BUILDERS =====
 
 
@@ -203,7 +262,7 @@ def _build_home_embed(embed_color: int) -> discord.Embed:
     return embed
 
 
-def _build_cog_embed(cog_name: str, embed_color: int) -> discord.Embed:
+def _build_cog_embed(cog_name: str, embed_color: int, command_ids: dict[str, int]) -> discord.Embed:
     desc, command_entries = _COG_DATA[cog_name]
     emoji = _COG_EMOJIS.get(cog_name, "")
     embed = discord.Embed(
@@ -213,8 +272,8 @@ def _build_cog_embed(cog_name: str, embed_color: int) -> discord.Embed:
     )
     for syntax, description, example in command_entries:
         embed.add_field(
-            name=f"`{syntax}`",
-            value=f"{description}\n**Example:** `{example}`",
+            name=_to_mention(syntax, command_ids),
+            value=f"{description}\n**Example:** {_example_to_mention(example, syntax, command_ids)}",
             inline=False,
         )
     embed.set_footer(text="<required>  [optional]  •  Use the buttons to navigate categories")
@@ -251,15 +310,17 @@ class CogButton(discord.ui.Button["HelpView"]):
         assert self.view is not None
         self.view._set_active(self._cog_name)
         await interaction.response.edit_message(
-            embed=_build_cog_embed(self._cog_name, self._embed_color), view=self.view
+            embed=_build_cog_embed(self._cog_name, self._embed_color, self.view._command_ids),
+            view=self.view,
         )
 
 
 class HelpView(discord.ui.View):
-    def __init__(self, embed_color: int, author_id: int) -> None:
+    def __init__(self, embed_color: int, author_id: int, command_ids: dict[str, int]) -> None:
         super().__init__(timeout=180)
         self._embed_color = embed_color
         self._author_id = author_id
+        self._command_ids = command_ids
 
         self._home_btn = HomeButton(embed_color=embed_color)
         self._home_btn.disabled = True  # already on home
@@ -296,8 +357,9 @@ class HelpCog(commands.Cog):
 
     @app_commands.command(name="help", description="Show all bot commands organised by category")
     async def help_command(self, interaction: discord.Interaction) -> None:
+        command_ids: dict[str, int] = getattr(self.bot, "synced_command_ids", {})
         embed = _build_home_embed(self.embed_color)
-        view = HelpView(embed_color=self.embed_color, author_id=interaction.user.id)
+        view = HelpView(embed_color=self.embed_color, author_id=interaction.user.id, command_ids=command_ids)
         await interaction.response.send_message(embed=embed, view=view)
 
 
