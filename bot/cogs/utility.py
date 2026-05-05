@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import datetime
+import platform
+import socket
+
 import discord
+import psutil
 from discord import app_commands
 from discord.ext import commands
 
@@ -40,6 +45,70 @@ class UtilityCog(commands.Cog):
             ),
         )
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="botinfo", description="Show bot system information")
+    async def botinfo(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(thinking=True)
+
+        # OS info
+        os_name = f"{platform.system()} {platform.release()}"
+        hostname = socket.gethostname()
+        cpu_arch = f"{platform.machine()} ({psutil.cpu_count(logical=False) or psutil.cpu_count()} cores)"
+        cpu_usage = f"{psutil.cpu_percent(interval=0.5):.0f}%"
+
+        mem = psutil.virtual_memory()
+        used_mb = mem.used / (1024 ** 2)
+        total_gb = mem.total / (1024 ** 3)
+        memory_usage = f"{used_mb:.2f}MB / {total_gb:.2f}GB"
+
+        python_version = f"v{platform.python_version()}"
+        dpy_version = discord.__version__
+
+        # Uptime
+        start_time = getattr(self.bot, "start_time", discord.utils.utcnow())
+        uptime_delta: datetime.timedelta = discord.utils.utcnow() - start_time
+        total_seconds = int(uptime_delta.total_seconds())
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, _ = divmod(remainder, 60)
+        uptime_str = f"{hours:02}:{minutes:02}"
+
+        # Guild stats
+        guild_count = len(self.bot.guilds)
+        channel_count = sum(len(g.channels) for g in self.bot.guilds)
+        user_count = sum(g.member_count or 0 for g in self.bot.guilds)
+
+        # Total commands (recursively count leaves)
+        def count_commands(cmds) -> int:
+            total = 0
+            for cmd in cmds:
+                if isinstance(cmd, app_commands.Group):
+                    total += count_commands(cmd.commands)
+                else:
+                    total += 1
+            return total
+
+        total_commands = count_commands(self.bot.tree.get_commands())
+
+        embed = discord.Embed(
+            title="Bot Information",
+            color=self.bot.embed_color,  # type: ignore[attr-defined]
+        )
+        embed.add_field(name="Operating System", value=os_name, inline=False)
+        embed.add_field(name="Uptime", value=uptime_str, inline=False)
+        embed.add_field(name="Hostname", value=hostname, inline=False)
+        embed.add_field(name="CPU Architecture", value=cpu_arch, inline=False)
+        embed.add_field(name="CPU Usage", value=cpu_usage, inline=False)
+        embed.add_field(name="Memory Usage", value=memory_usage, inline=False)
+        embed.add_field(name="Python Version", value=python_version, inline=False)
+        embed.add_field(name="Discord.py Version", value=dpy_version, inline=False)
+        embed.add_field(
+            name="Connected to",
+            value=f"{guild_count} guilds, {channel_count} channels, and {user_count} users",
+            inline=False,
+        )
+        embed.add_field(name="Total Commands", value=str(total_commands), inline=False)
+
+        await interaction.followup.send(embed=embed, ephemeral=False)
 
     # ======================
     # PAGINATION HELPER

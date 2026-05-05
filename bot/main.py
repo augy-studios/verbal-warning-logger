@@ -65,6 +65,7 @@ class VerbalWarningsBot(commands.Bot):
         await super().close()
 
     async def on_ready(self) -> None:
+        self.start_time = discord.utils.utcnow()
         log.info("Logged in as %s (ID: %s)", self.user, self.user.id if self.user else "?")
 
 
