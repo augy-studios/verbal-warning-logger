@@ -57,7 +57,8 @@ class VerbalWarningsBot(commands.Bot):
         await self.load_extension("bot.cogs.auttaja")
 
         # Sync commands globally (can take time) — you can switch to guild sync during dev.
-        await self.tree.sync()
+        synced = await self.tree.sync()
+        self.synced_command_ids: dict[str, int] = {cmd.name: cmd.id for cmd in synced}
         log.info("App commands synced")
 
     async def close(self) -> None:
